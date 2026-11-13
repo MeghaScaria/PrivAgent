@@ -1,0 +1,22 @@
+{
+  "action_level": [
+    "agent_role",
+    "tool_name",
+    "action_type",
+    "data_sensitivity",
+    "destination_category"
+  ],
+  "trajectory_level": [
+    "agent_role",
+    "tool_name",
+    "action_type",
+    "data_sensitivity",
+    "destination_category",
+    "max_sensitivity",
+    "max_destination",
+    "prev_sensitive_reads",
+    "prev_external_transmits",
+    "prev_risky_actions",
+    "max_prev_risk"
+  ]
+}

@@ -1,0 +1,406 @@
+{
+  "rows": {
+    "recovery": 900,
+    "ledger": 900,
+    "confidentiality": 180,
+    "encryption": 1260,
+    "encryption_latency": 180,
+    "deserialization_store": 300,
+    "deserialization_serde": 1020,
+    "performance": 270,
+    "performance_memory": 60
+  },
+  "failed": {
+    "recovery": 0,
+    "ledger": 0,
+    "confidentiality": 0,
+    "encryption": 0,
+    "deserialization_store": 0,
+    "deserialization_serde": 0,
+    "performance": 0,
+    "performance_memory": 0
+  },
+  "units": {
+    "recovery: independent trials (own store, own seed, separate processes)": 900,
+    "ledger: independent trials": 900,
+    "confidentiality: independent trials (3 phases per row)": 180,
+    "encryption: independent paused runs (each yields 7 manipulation rows on copies of one store)": 180,
+    "encryption_latency: per-run summaries of 200 timing repetitions (same runs as encryption)": 0,
+    "deserialization_store: independent trials": 300,
+    "deserialization_serde compatibility: independent paused runs (2 decoder modes per run)": 180,
+    "deserialization_serde other cases: 30 repetitions of 22 deterministic computations": 660,
+    "performance: measured runs (warm-ups excluded)": 240,
+    "performance: warm-up runs (excluded from analysis)": 30,
+    "performance_memory: independent runs": 60
+  },
+  "independent_units": 2940,
+  "deterministic_repetitions": 660,
+  "r5_reused_in_exp5": true,
+  "execution_recovery": {
+    "A": {
+      "checkpoint_recovered": 120,
+      "approve_trials": 120,
+      "exactly_one_delivery": 90,
+      "completion_recorded_in_ledger": null,
+      "stuck_executing": null
+    },
+    "B": {
+      "checkpoint_recovered": 120,
+      "approve_trials": 120,
+      "exactly_one_delivery": 120,
+      "completion_recorded_in_ledger": 90,
+      "stuck_executing": 30
+    },
+    "C": {
+      "checkpoint_recovered": 120,
+      "approve_trials": 120,
+      "exactly_one_delivery": 120,
+      "completion_recorded_in_ledger": 90,
+      "stuck_executing": 30
+    },
+    "D": {
+      "checkpoint_recovered": 120,
+      "approve_trials": 120,
+      "exactly_one_delivery": 120,
+      "completion_recorded_in_ledger": 90,
+      "stuck_executing": 30
+    },
+    "E": {
+      "checkpoint_recovered": 120,
+      "approve_trials": 120,
+      "exactly_one_delivery": 120,
+      "completion_recorded_in_ledger": 90,
+      "stuck_executing": 30
+    },
+    "F": {
+      "checkpoint_recovered": 120,
+      "approve_trials": 120,
+      "exactly_one_delivery": 90,
+      "completion_recorded_in_ledger": null,
+      "stuck_executing": null
+    }
+  },
+  "log_anomalies": [
+    {
+      "file": "ledger",
+      "config": "A",
+      "scenario": "L3_double_click",
+      "trial": 11,
+      "seed": "20261109-L-A-L3_double_click-11",
+      "attempts": 1,
+      "delivered": 2
+    }
+  ],
+  "enc_outcomes": {
+    "A|flip_ciphertext": {
+      "recovered_altered": 30,
+      "recovered_unchanged": 0,
+      "rejected": 0
+    },
+    "A|flip_tag": {
+      "recovered_altered": 0,
+      "recovered_unchanged": 30,
+      "rejected": 0
+    },
+    "A|missing_key": {
+      "recovered_altered": 0,
+      "recovered_unchanged": 30,
+      "rejected": 0
+    },
+    "A|none": {
+      "recovered_altered": 0,
+      "recovered_unchanged": 30,
+      "rejected": 0
+    },
+    "A|plaintext_inject": {
+      "recovered_altered": 30,
+      "recovered_unchanged": 0,
+      "rejected": 0
+    },
+    "A|truncate": {
+      "recovered_altered": 0,
+      "recovered_unchanged": 0,
+      "rejected": 30
+    },
+    "A|wrong_key": {
+      "recovered_altered": 0,
+      "recovered_unchanged": 30,
+      "rejected": 0
+    },
+    "B|flip_ciphertext": {
+      "recovered_altered": 0,
+      "recovered_unchanged": 0,
+      "rejected": 30
+    },
+    "B|flip_tag": {
+      "recovered_altered": 0,
+      "recovered_unchanged": 0,
+      "rejected": 30
+    },
+    "B|missing_key": {
+      "recovered_altered": 0,
+      "recovered_unchanged": 0,
+      "rejected": 30
+    },
+    "B|none": {
+      "recovered_altered": 0,
+      "recovered_unchanged": 30,
+      "rejected": 0
+    },
+    "B|plaintext_inject": {
+      "recovered_altered": 0,
+      "recovered_unchanged": 0,
+      "rejected": 30
+    },
+    "B|truncate": {
+      "recovered_altered": 0,
+      "recovered_unchanged": 0,
+      "rejected": 30
+    },
+    "B|wrong_key": {
+      "recovered_altered": 0,
+      "recovered_unchanged": 0,
+      "rejected": 30
+    },
+    "C|flip_ciphertext": {
+      "recovered_altered": 29,
+      "recovered_unchanged": 0,
+      "rejected": 1
+    },
+    "C|flip_tag": {
+      "recovered_altered": 0,
+      "recovered_unchanged": 30,
+      "rejected": 0
+    },
+    "C|missing_key": {
+      "recovered_altered": 0,
+      "recovered_unchanged": 30,
+      "rejected": 0
+    },
+    "C|none": {
+      "recovered_altered": 0,
+      "recovered_unchanged": 30,
+      "rejected": 0
+    },
+    "C|plaintext_inject": {
+      "recovered_altered": 30,
+      "recovered_unchanged": 0,
+      "rejected": 0
+    },
+    "C|truncate": {
+      "recovered_altered": 0,
+      "recovered_unchanged": 0,
+      "rejected": 30
+    },
+    "C|wrong_key": {
+      "recovered_altered": 0,
+      "recovered_unchanged": 30,
+      "rejected": 0
+    },
+    "D|flip_ciphertext": {
+      "recovered_altered": 0,
+      "recovered_unchanged": 0,
+      "rejected": 30
+    },
+    "D|flip_tag": {
+      "recovered_altered": 0,
+      "recovered_unchanged": 0,
+      "rejected": 30
+    },
+    "D|missing_key": {
+      "recovered_altered": 0,
+      "recovered_unchanged": 0,
+      "rejected": 30
+    },
+    "D|none": {
+      "recovered_altered": 0,
+      "recovered_unchanged": 30,
+      "rejected": 0
+    },
+    "D|plaintext_inject": {
+      "recovered_altered": 0,
+      "recovered_unchanged": 0,
+      "rejected": 30
+    },
+    "D|truncate": {
+      "recovered_altered": 0,
+      "recovered_unchanged": 0,
+      "rejected": 30
+    },
+    "D|wrong_key": {
+      "recovered_altered": 0,
+      "recovered_unchanged": 0,
+      "rejected": 30
+    },
+    "E|flip_ciphertext": {
+      "recovered_altered": 0,
+      "recovered_unchanged": 0,
+      "rejected": 30
+    },
+    "E|flip_tag": {
+      "recovered_altered": 0,
+      "recovered_unchanged": 0,
+      "rejected": 30
+    },
+    "E|missing_key": {
+      "recovered_altered": 0,
+      "recovered_unchanged": 0,
+      "rejected": 30
+    },
+    "E|none": {
+      "recovered_altered": 0,
+      "recovered_unchanged": 30,
+      "rejected": 0
+    },
+    "E|plaintext_inject": {
+      "recovered_altered": 0,
+      "recovered_unchanged": 0,
+      "rejected": 30
+    },
+    "E|truncate": {
+      "recovered_altered": 0,
+      "recovered_unchanged": 0,
+      "rejected": 30
+    },
+    "E|wrong_key": {
+      "recovered_altered": 0,
+      "recovered_unchanged": 0,
+      "rejected": 30
+    },
+    "F|flip_ciphertext": {
+      "recovered_altered": 0,
+      "recovered_unchanged": 0,
+      "rejected": 30
+    },
+    "F|flip_tag": {
+      "recovered_altered": 0,
+      "recovered_unchanged": 0,
+      "rejected": 30
+    },
+    "F|missing_key": {
+      "recovered_altered": 0,
+      "recovered_unchanged": 0,
+      "rejected": 30
+    },
+    "F|none": {
+      "recovered_altered": 0,
+      "recovered_unchanged": 30,
+      "rejected": 0
+    },
+    "F|plaintext_inject": {
+      "recovered_altered": 0,
+      "recovered_unchanged": 0,
+      "rejected": 30
+    },
+    "F|truncate": {
+      "recovered_altered": 0,
+      "recovered_unchanged": 0,
+      "rejected": 30
+    },
+    "F|wrong_key": {
+      "recovered_altered": 0,
+      "recovered_unchanged": 0,
+      "rejected": 30
+    }
+  },
+  "enc_errors": {
+    "A|truncate": {
+      "ValueError": 30
+    },
+    "B|flip_ciphertext": {
+      "InvalidTag": 30
+    },
+    "B|flip_tag": {
+      "InvalidTag": 30
+    },
+    "B|missing_key": {
+      "InvalidTag": 30
+    },
+    "B|plaintext_inject": {
+      "ValueError": 30
+    },
+    "B|truncate": {
+      "InvalidTag": 30
+    },
+    "B|wrong_key": {
+      "InvalidTag": 30
+    },
+    "C|flip_ciphertext": {
+      "ValueError": 1
+    },
+    "C|truncate": {
+      "ValueError": 30
+    },
+    "D|flip_ciphertext": {
+      "InvalidTag": 30
+    },
+    "D|flip_tag": {
+      "InvalidTag": 30
+    },
+    "D|missing_key": {
+      "InvalidTag": 30
+    },
+    "D|plaintext_inject": {
+      "ValueError": 30
+    },
+    "D|truncate": {
+      "InvalidTag": 30
+    },
+    "D|wrong_key": {
+      "InvalidTag": 30
+    },
+    "E|flip_ciphertext": {
+      "InvalidTag": 30
+    },
+    "E|flip_tag": {
+      "InvalidTag": 30
+    },
+    "E|missing_key": {
+      "InvalidTag": 30
+    },
+    "E|plaintext_inject": {
+      "ValueError": 30
+    },
+    "E|truncate": {
+      "InvalidTag": 30
+    },
+    "E|wrong_key": {
+      "InvalidTag": 30
+    },
+    "F|flip_ciphertext": {
+      "InvalidTag": 30
+    },
+    "F|flip_tag": {
+      "InvalidTag": 30
+    },
+    "F|missing_key": {
+      "InvalidTag": 30
+    },
+    "F|plaintext_inject": {
+      "ValueError": 30
+    },
+    "F|truncate": {
+      "InvalidTag": 30
+    },
+    "F|wrong_key": {
+      "InvalidTag": 30
+    }
+  },
+  "fisher_two_sided": {
+    "R5 dup B vs F": 1.6911233892144735e-17,
+    "R5 dup B vs A": 1.6911233892144735e-17,
+    "L3 dup B vs F": 1.6911233892144735e-17,
+    "probe key-holder B vs D": 1.6911233892144735e-17
+  },
+  "fisher_exact_value": 1.6911233892144735e-17,
+  "fisher_one_sided": 8.455616946072368e-18,
+  "holm_adjusted": [
+    6.764493556857894e-17,
+    5.0733701676434206e-17,
+    3.382246778428947e-17,
+    1.6911233892144735e-17
+  ],
+  "bootstrap_max_dev_pct_points": 0.9057594182690032,
+  "workflow_ratio_B_F": 1.3542890988863865,
+  "bootstrap_note": "analyze.py draws all bootstrap resamples from one module-level generator (seed 20261111), so each interval depends on the order of calls; intervals are reproducible only by re-running the whole script unchanged."
+}

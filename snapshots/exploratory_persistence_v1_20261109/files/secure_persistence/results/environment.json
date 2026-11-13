@@ -1,0 +1,37 @@
+{
+  "timestamp": "2026-11-09T03:39:16",
+  "platform": "Windows-11-10.0.26200-SP0",
+  "processor": "Intel64 Family 6 Model 186 Stepping 3, GenuineIntel",
+  "cpu_logical": 12,
+  "cpu_physical": 10,
+  "memory_gb": 16.8,
+  "python": "3.14.3",
+  "sqlite": "3.50.4",
+  "packages": {
+    "langgraph": "1.2.19",
+    "langgraph-checkpoint": "4.3.1",
+    "langgraph-checkpoint-sqlite": "3.1.3",
+    "cryptography": "42.0.2",
+    "ormsgpack": "1.13.0",
+    "numpy": "2.4.2",
+    "pandas": "3.0.0",
+    "scipy": "1.17.0",
+    "matplotlib": "3.10.8",
+    "psutil": "7.2.2"
+  },
+  "power_plan_note": "not controlled; laptop/desktop default",
+  "n": 30,
+  "perf_n": 40,
+  "warmups": 5,
+  "memory_n": 10,
+  "workers": 10,
+  "experiments": [
+    "recovery",
+    "ledger",
+    "confidentiality",
+    "encryption",
+    "deserialization",
+    "performance"
+  ],
+  "seed": 20261109
+}

@@ -1,0 +1,11 @@
+config,attacker,trials,failed,probe_constructed,ci_lo,ci_hi,load_raised,final_output_type
+A,no_key,2,0,1.0,0.34237195288961925,1.0,0.0,SideEffectProbe
+B,key_holder,2,0,0.0,0.0,0.6576280471103807,0.0,dict
+B,no_key,2,0,0.0,0.0,0.6576280471103807,1.0,
+C,no_key,2,0,0.0,0.0,0.6576280471103807,0.0,dict
+D,key_holder,2,0,1.0,0.34237195288961925,1.0,0.0,SideEffectProbe
+D,no_key,2,0,0.0,0.0,0.6576280471103807,1.0,
+E,key_holder,2,0,0.0,0.0,0.6576280471103807,0.0,dict
+E,no_key,2,0,0.0,0.0,0.6576280471103807,1.0,
+F,key_holder,2,0,0.0,0.0,0.6576280471103807,0.0,dict
+F,no_key,2,0,0.0,0.0,0.6576280471103807,1.0,

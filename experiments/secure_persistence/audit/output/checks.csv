@@ -1,0 +1,72 @@
+id,section,claim,stated,recomputed,status,note
+0.1,header,total rows in 9 CSV files,5070,5070,MATCH,
+0.2,header,failed rows,0,0,MATCH,
+0.3,header,"'5,070 trials' are independent experimental trials","5,070 trials","2940 independent runs + 660 repeated deterministic serializer computations + 30 warm-ups; the rest are derived rows (7 manipulations per encryption run, 2 decoder modes per compatibility run, 180 latency summaries)",MISMATCH,Rows are not trials. See EXPLORATORY_AUDIT.md section 2.
+1.0,B1,correct_outcome column equals re-derived criterion,column,900/900 agree,MATCH,
+1.1,B1,"per-scenario correct outcomes (30/30 except A,F R5 = 0/30)",table,recomputed,MATCH,
+1.2A,B1,pooled correct outcome A,"120/150 [72.9, 85.6]","120/150 [72.9, 85.6]",MATCH,
+1.3A,B1,pooled duplicate delivery A,"30/150 [14.4, 27.1]","30/150 [14.4, 27.1]",MATCH,
+1.4A,B1,pending request recovered A,150/150,150/150,MATCH,
+1.2B,B1,pooled correct outcome B,"150/150 [97.5, 100.0]","150/150 [97.5, 100.0]",MATCH,
+1.3B,B1,pooled duplicate delivery B,"0/150 [0.0, 2.5]","0/150 [0.0, 2.5]",MATCH,
+1.4B,B1,pending request recovered B,150/150,150/150,MATCH,
+1.2C,B1,pooled correct outcome C,"150/150 [97.5, 100.0]","150/150 [97.5, 100.0]",MATCH,
+1.3C,B1,pooled duplicate delivery C,"0/150 [0.0, 2.5]","0/150 [0.0, 2.5]",MATCH,
+1.4C,B1,pending request recovered C,150/150,150/150,MATCH,
+1.2D,B1,pooled correct outcome D,"150/150 [97.5, 100.0]","150/150 [97.5, 100.0]",MATCH,
+1.3D,B1,pooled duplicate delivery D,"0/150 [0.0, 2.5]","0/150 [0.0, 2.5]",MATCH,
+1.4D,B1,pending request recovered D,150/150,150/150,MATCH,
+1.2E,B1,pooled correct outcome E,"150/150 [97.5, 100.0]","150/150 [97.5, 100.0]",MATCH,
+1.3E,B1,pooled duplicate delivery E,"0/150 [0.0, 2.5]","0/150 [0.0, 2.5]",MATCH,
+1.4E,B1,pending request recovered E,150/150,150/150,MATCH,
+1.2F,B1,pooled correct outcome F,"120/150 [72.9, 85.6]","120/150 [72.9, 85.6]",MATCH,
+1.3F,B1,pooled duplicate delivery F,"30/150 [14.4, 27.1]","30/150 [14.4, 27.1]",MATCH,
+1.4F,B1,pending request recovered F,150/150,150/150,MATCH,
+1.5,B1/D1,rejected action never sent (R2),0/180,0/180,MATCH,
+1.6,B1,R5 ledger stays 'executing' in B-E,30/30 each (120),{'executing': 120},MATCH,
+1.7R1,B1,"R1 second resume: helper no_pending, raw RuntimeError",180/180,{'no_pending_approval': 180}; {'raised RuntimeError': 180},MATCH,
+1.7R2,B1,"R2 second resume: helper no_pending, raw RuntimeError",180/180,{'no_pending_approval': 180}; {'raised RuntimeError': 180},MATCH,
+1.8,B1,median recovery 4.3-4.9 s,4.3-4.9 s,4.328-4.850 s,MATCH,
+1.9,B1,"checkpoint read 2.3 ms unenc, 4.9-5.6 ms enc",2.3 / 4.9-5.6 ms,2.27-2.36 / 4.90-5.59 ms,MATCH,unencrypted range is 2.28-2.36 ms; '2.3' is a rounded summary
+1.10,D1,R4/R5 approval had to be given again in all trials,all,360/360,MATCH,
+2.0,B5,at_most_once column equals delivered<=1,column,900/900,MATCH,
+2.1,B5,"per-scenario at-most-once (30/30 except A L3 5/30, F L3 0/30)",table,recomputed,MATCH,
+2.2,D5,A L3 duplicates,25/30,25/30,MATCH,
+2.3,D5,transmission-log anomaly: one A L3 trial with 1 attempt / 2 deliveries,1 trial,"[{'file': 'ledger', 'config': 'A', 'scenario': 'L3_double_click', 'trial': 11, 'seed': '20261109-L-A-L3_double_click-11', 'attempts': 1, 'delivered': 2}]",MATCH,
+2.4,B5,ledger state 'matched the deliveries' in 60/60 per config (B-E),60/60 each,R1: executed & delivered 120/120; R5: 'executing' & delivered 120/120. Ledger records the delivery in 120/240,MISMATCH,"Counts are right, but in R5 the ledger does not record the delivery; 'consistent with the crash point' is accurate, 'matched the deliveries' is not. See CORRECTIONS.md C4."
+3.1A,B2,"canary counts A (raw pause, dec pause, raw completed, raw closed)","(18, 18, 18, 18)","[(18, 18), (18, 18), (18, 18), (18, 18)]",MATCH,min=max across all 30 trials
+3.1B,B2,"canary counts B (raw pause, dec pause, raw completed, raw closed)","(0, 2, 0, 0)","[(0, 0), (2, 2), (0, 0), (0, 0)]",MATCH,min=max across all 30 trials
+3.1C,B2,"canary counts C (raw pause, dec pause, raw completed, raw closed)","(2, 2, 2, 2)","[(2, 2), (2, 2), (2, 2), (2, 2)]",MATCH,min=max across all 30 trials
+3.1D,B2,"canary counts D (raw pause, dec pause, raw completed, raw closed)","(0, 2, 0, 0)","[(0, 0), (2, 2), (0, 0), (0, 0)]",MATCH,min=max across all 30 trials
+3.1E,B2,"canary counts E (raw pause, dec pause, raw completed, raw closed)","(0, 18, 0, 0)","[(0, 0), (18, 18), (0, 0), (0, 0)]",MATCH,min=max across all 30 trials
+3.1F,B2,"canary counts F (raw pause, dec pause, raw completed, raw closed)","(0, 2, 0, 0)","[(0, 0), (2, 2), (0, 0), (0, 0)]",MATCH,min=max across all 30 trials
+3.2A,B2,blob bytes mean±SD A,9327 ± 13,9327.1 ± 13.1,MATCH,
+3.2B,B2,blob bytes mean±SD B,8496 ± 11,8495.5 ± 11.0,MATCH,
+3.2C,B2,blob bytes mean±SD C,8439 ± 12,8438.6 ± 12.4,MATCH,
+3.2D,B2,blob bytes mean±SD D,8497 ± 14,8496.9 ± 14.1,MATCH,
+3.2E,B2,blob bytes mean±SD E,9389 ± 16,9389.4 ± 15.6,MATCH,
+3.2F,B2,blob bytes mean±SD F,8497 ± 13,8497.2 ± 13.0,MATCH,
+3.3,B2,"file bytes 86,336 in every trial",86336,[86336],MATCH,
+3.4,D2,minimization reduced blob bytes ~9% (A to C: -9.5%),-9.5% (A->C),A->C -9.53%; E->B -9.52%,MATCH,"Number correct, but A->C also changes M2 and M4; E->B (-9.5%) isolates M3. See CORRECTIONS.md C6."
+3.5,D2,encryption adds ~57 bytes per checkpoint (C to B),57 B per checkpoint,57.0 B per paused thread (sum over all stored blobs),MISMATCH,Value right; unit wrong: pending_blob_bytes sums the checkpoint blob and all write blobs of the thread. 28 B (12 nonce + 16 tag) per blob is the expected per-blob cost. See CORRECTIONS.md C7.
+3.6,B2,checkpoint rows after purge 0,0,[0],MATCH,
+4.1,B3,tamper/key table cells (outcome counts and sends),table,all 42 cells,MATCH,
+4.2,B3,encrypted plaintext_inject refused with ValueError,ValueError,"{'B|plaintext_inject': {'ValueError': 30}, 'D|plaintext_inject': {'ValueError': 30}, 'E|plaintext_inject': {'ValueError': 30}, 'F|plaintext_inject': {'ValueError': 30}}",MATCH,
+4.3,B3/D3,wrong/missing key reported in the tamper-detection table as 'rejected','Every manipulation is rejected',"{'B|missing_key': {'InvalidTag': 30}, 'B|wrong_key': {'InvalidTag': 30}, 'D|missing_key': {'InvalidTag': 30}, 'D|wrong_key': {'InvalidTag': 30}, 'E|missing_key': {'InvalidTag': 30}, 'E|wrong_key': {'InvalidTag': 30}, 'F|missing_key': {'InvalidTag': 30}, 'F|wrong_key': {'InvalidTag': 30}}",MISMATCH,"A wrong or missing key is a key-availability failure, not a detected tampering event; the InvalidTag is identical to tamper detection, so the two are indistinguishable to the system. See CORRECTIONS.md C1."
+4.4,B3,AES-GCM median encrypt 8-17 us / decrypt 7.4-9.2 us,8-17 / 7.4-9.2,8.02-16.59 / 7.42-9.20,MATCH,
+4.5,B3,AES-GCM P95 encrypt 23.4-24.0 / decrypt 21.7-22.9,23.4-24.0 / 21.7-22.9,23.39-24.00 / 21.71-22.87,MATCH,
+4.6,B3,'180 trials x 200 repetitions',180 x 200,"180 rows, each the mean of 200 repetitions",MATCH,"Each row is a per-run mean; the median/P95 are over 30 run-means per configuration, not over 6,000 individual timings. See CORRECTIONS.md C9."
+5.1,B4,store-level probe table,table,all 10 cells,MATCH,
+5.2,B4,checkpoint state round-trips 180/180 per mode,180/180 each,360/360 (both modes together),MATCH,
+5.3,B4,"known probe class: permissive constructs 30/30, strict 0/30",30 / 0,"{'permissive': 30, 'strict': 0}",MATCH,
+5.4,B4,tuple comes back as list,list,['list'],MATCH,
+6.1,B5,Fisher two-sided 0/30 vs 30/30 p < 1e-16,< 1e-16,"1.691e-17 (= 2 / C(60,30))",MATCH,
+7.0,B6,40 measured runs per configuration,40,"{'A': 40, 'B': 40, 'C': 40, 'D': 40, 'E': 40, 'F': 40}",MATCH,
+7.1,B6,"mean, median, SD, P95, overhead vs generated table (exact)",table,all equal to 1e-6,MATCH,
+7.2,B6,bootstrap CIs reproduce with an independent generator,table,max deviation 0.91 percentage points,MATCH,Monte Carlo; tolerance 3 percentage points of the median / of the ratio
+7.3,B6,"B6 table values (mean, median, SD, P95, overhead)",table,all equal at 1 dp,MATCH,
+7.4,D6,encryption raised per-call read from 0.12 to 0.18 ms,0.12 -> 0.18,"{'A': 0.12, 'B': 0.181, 'C': 0.124, 'D': 0.179, 'E': 0.186, 'F': 0.173}",MATCH,"Values are medians of per-run mean latencies, not per-call medians. See CORRECTIONS.md C8."
+7.5,D6,+12.3 ms approve-to-completion in every ledger configuration,+12.3 ms,"mean diff B 12.3, C 13.5, D 12.6, E 12.9; median diff B 11.8, C 12.5, D 12.3, E 12.0",MATCH,+12.3 ms is B's mean difference; the per-configuration range is 12.3-13.5 ms (mean) / 11.8-12.5 ms (median)
+7.6,D6,+20 ms recovery with the ledger,+20 ms,20.0 ms (B-A medians),MATCH,
+7.7,B6,"Mann-Whitney U=1600, p=1.4e-14","U=1600, p=1.4e-14","U=1600, p=1.44e-14",MATCH,
+7.8,B6,memory A/B medians 0.315/0.317 MB,0.315 / 0.317,0.315 / 0.317,MATCH,

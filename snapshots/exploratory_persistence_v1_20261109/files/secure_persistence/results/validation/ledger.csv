@@ -1,0 +1,61 @@
+config,scenario,trial,seed,status,error,paused,attempts,delivered,expected,duplicate,at_most_once,second_submit,raw_resume,thread_errors,ledger_status
+A,L1_first_approval,0,20261109-L-A-L1_first_approval-0,complete,,True,1,1,1,False,True,,,,
+A,L2_repeated_approval,0,20261109-L-A-L2_repeated_approval-0,complete,,True,1,1,1,False,True,no_pending_approval,raised RuntimeError,,
+A,L3_double_click,0,20261109-L-A-L3_double_click-0,complete,,True,2,2,1,True,False,,,,
+A,L4_duplicate_resume,0,20261109-L-A-L4_duplicate_resume-0,complete,,True,1,1,1,False,True,,raised RuntimeError,,
+A,L5_reject,0,20261109-L-A-L5_reject-0,complete,,True,0,0,0,False,True,,raised RuntimeError,,
+B,L1_first_approval,0,20261109-L-B-L1_first_approval-0,complete,,True,1,1,1,False,True,,,,executed
+B,L2_repeated_approval,0,20261109-L-B-L2_repeated_approval-0,complete,,True,1,1,1,False,True,no_pending_approval,raised RuntimeError,,executed
+B,L3_double_click,0,20261109-L-B-L3_double_click-0,complete,,True,1,1,1,False,True,,,,executed
+B,L4_duplicate_resume,0,20261109-L-B-L4_duplicate_resume-0,complete,,True,1,1,1,False,True,,raised RuntimeError,,executed
+B,L5_reject,0,20261109-L-B-L5_reject-0,complete,,True,0,0,0,False,True,,raised RuntimeError,,
+C,L1_first_approval,0,20261109-L-C-L1_first_approval-0,complete,,True,1,1,1,False,True,,,,executed
+C,L2_repeated_approval,0,20261109-L-C-L2_repeated_approval-0,complete,,True,1,1,1,False,True,no_pending_approval,raised RuntimeError,,executed
+C,L3_double_click,0,20261109-L-C-L3_double_click-0,complete,,True,1,1,1,False,True,,,,executed
+C,L4_duplicate_resume,0,20261109-L-C-L4_duplicate_resume-0,complete,,True,1,1,1,False,True,,raised RuntimeError,,executed
+C,L5_reject,0,20261109-L-C-L5_reject-0,complete,,True,0,0,0,False,True,,raised RuntimeError,,
+D,L1_first_approval,0,20261109-L-D-L1_first_approval-0,complete,,True,1,1,1,False,True,,,,executed
+D,L2_repeated_approval,0,20261109-L-D-L2_repeated_approval-0,complete,,True,1,1,1,False,True,no_pending_approval,raised RuntimeError,,executed
+D,L3_double_click,0,20261109-L-D-L3_double_click-0,complete,,True,1,1,1,False,True,,,,executed
+D,L4_duplicate_resume,0,20261109-L-D-L4_duplicate_resume-0,complete,,True,1,1,1,False,True,,raised RuntimeError,,executed
+D,L5_reject,0,20261109-L-D-L5_reject-0,complete,,True,0,0,0,False,True,,raised RuntimeError,,
+E,L1_first_approval,0,20261109-L-E-L1_first_approval-0,complete,,True,1,1,1,False,True,,,,executed
+E,L2_repeated_approval,0,20261109-L-E-L2_repeated_approval-0,complete,,True,1,1,1,False,True,no_pending_approval,raised RuntimeError,,executed
+E,L3_double_click,0,20261109-L-E-L3_double_click-0,complete,,True,1,1,1,False,True,,,,executed
+E,L4_duplicate_resume,0,20261109-L-E-L4_duplicate_resume-0,complete,,True,1,1,1,False,True,,raised RuntimeError,,executed
+E,L5_reject,0,20261109-L-E-L5_reject-0,complete,,True,0,0,0,False,True,,raised RuntimeError,,
+F,L1_first_approval,0,20261109-L-F-L1_first_approval-0,complete,,True,1,1,1,False,True,,,,
+F,L2_repeated_approval,0,20261109-L-F-L2_repeated_approval-0,complete,,True,1,1,1,False,True,no_pending_approval,raised RuntimeError,,
+F,L3_double_click,0,20261109-L-F-L3_double_click-0,complete,,True,2,2,1,True,False,,,,
+F,L4_duplicate_resume,0,20261109-L-F-L4_duplicate_resume-0,complete,,True,1,1,1,False,True,,raised RuntimeError,,
+F,L5_reject,0,20261109-L-F-L5_reject-0,complete,,True,0,0,0,False,True,,raised RuntimeError,,
+A,L1_first_approval,1,20261109-L-A-L1_first_approval-1,complete,,True,1,1,1,False,True,,,,
+A,L2_repeated_approval,1,20261109-L-A-L2_repeated_approval-1,complete,,True,1,1,1,False,True,no_pending_approval,raised RuntimeError,,
+A,L3_double_click,1,20261109-L-A-L3_double_click-1,complete,,True,2,2,1,True,False,,,,
+A,L4_duplicate_resume,1,20261109-L-A-L4_duplicate_resume-1,complete,,True,1,1,1,False,True,,raised RuntimeError,,
+A,L5_reject,1,20261109-L-A-L5_reject-1,complete,,True,0,0,0,False,True,,raised RuntimeError,,
+B,L1_first_approval,1,20261109-L-B-L1_first_approval-1,complete,,True,1,1,1,False,True,,,,executed
+B,L2_repeated_approval,1,20261109-L-B-L2_repeated_approval-1,complete,,True,1,1,1,False,True,no_pending_approval,raised RuntimeError,,executed
+B,L3_double_click,1,20261109-L-B-L3_double_click-1,complete,,True,1,1,1,False,True,,,,executed
+B,L4_duplicate_resume,1,20261109-L-B-L4_duplicate_resume-1,complete,,True,1,1,1,False,True,,raised RuntimeError,,executed
+B,L5_reject,1,20261109-L-B-L5_reject-1,complete,,True,0,0,0,False,True,,raised RuntimeError,,
+C,L1_first_approval,1,20261109-L-C-L1_first_approval-1,complete,,True,1,1,1,False,True,,,,executed
+C,L2_repeated_approval,1,20261109-L-C-L2_repeated_approval-1,complete,,True,1,1,1,False,True,no_pending_approval,raised RuntimeError,,executed
+C,L3_double_click,1,20261109-L-C-L3_double_click-1,complete,,True,1,1,1,False,True,,,,executed
+C,L4_duplicate_resume,1,20261109-L-C-L4_duplicate_resume-1,complete,,True,1,1,1,False,True,,raised RuntimeError,,executed
+C,L5_reject,1,20261109-L-C-L5_reject-1,complete,,True,0,0,0,False,True,,raised RuntimeError,,
+D,L1_first_approval,1,20261109-L-D-L1_first_approval-1,complete,,True,1,1,1,False,True,,,,executed
+D,L2_repeated_approval,1,20261109-L-D-L2_repeated_approval-1,complete,,True,1,1,1,False,True,no_pending_approval,raised RuntimeError,,executed
+D,L3_double_click,1,20261109-L-D-L3_double_click-1,complete,,True,1,1,1,False,True,,,,executed
+D,L4_duplicate_resume,1,20261109-L-D-L4_duplicate_resume-1,complete,,True,1,1,1,False,True,,raised RuntimeError,,executed
+D,L5_reject,1,20261109-L-D-L5_reject-1,complete,,True,0,0,0,False,True,,raised RuntimeError,,
+E,L1_first_approval,1,20261109-L-E-L1_first_approval-1,complete,,True,1,1,1,False,True,,,,executed
+E,L2_repeated_approval,1,20261109-L-E-L2_repeated_approval-1,complete,,True,1,1,1,False,True,no_pending_approval,raised RuntimeError,,executed
+E,L3_double_click,1,20261109-L-E-L3_double_click-1,complete,,True,1,1,1,False,True,,,,executed
+E,L4_duplicate_resume,1,20261109-L-E-L4_duplicate_resume-1,complete,,True,1,1,1,False,True,,raised RuntimeError,,executed
+E,L5_reject,1,20261109-L-E-L5_reject-1,complete,,True,0,0,0,False,True,,raised RuntimeError,,
+F,L1_first_approval,1,20261109-L-F-L1_first_approval-1,complete,,True,1,1,1,False,True,,,,
+F,L2_repeated_approval,1,20261109-L-F-L2_repeated_approval-1,complete,,True,1,1,1,False,True,no_pending_approval,raised RuntimeError,,
+F,L3_double_click,1,20261109-L-F-L3_double_click-1,complete,,True,2,2,1,True,False,,,,
+F,L4_duplicate_resume,1,20261109-L-F-L4_duplicate_resume-1,complete,,True,1,1,1,False,True,,raised RuntimeError,,
+F,L5_reject,1,20261109-L-F-L5_reject-1,complete,,True,0,0,0,False,True,,raised RuntimeError,,

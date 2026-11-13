@@ -1,0 +1,12 @@
+.env
+__pycache__/
+*.pyc
+.venv/
+venv/
+logs/
+# Local approval store: checkpoints, execution ledger, master key
+runtime/
+data/*.csv
+*.egg-info/
+.DS_Store
+.streamlit/secrets.toml

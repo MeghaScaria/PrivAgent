@@ -1,0 +1,28 @@
+# A note on why this is one service, not five:
+#
+# The four MCP servers in mcp_servers/ use MCP's *stdio* transport --
+# they are spawned as subprocesses by agents/mcp_client.py and talk to
+# it over stdin/stdout, not over a network socket. That's a deliberate,
+# correct choice for this project (it's simpler and faster than running
+# an HTTP/SSE transport for a single-machine deployment), but it does
+# mean the servers cannot be split into separate containers without
+# rewriting them to use MCP's HTTP/SSE transport instead -- they are
+# child processes of the main app, not independently addressable
+# services. So: one service, which starts the dashboard, which starts
+# the four MCP servers as subprocesses internally, exactly as it does
+# when you run `python main.py` directly.
+#
+# One command still starts everything:
+#   docker compose up --build
+
+services:
+  privagent:
+    build: .
+    ports:
+      - "8501:8501"
+    environment:
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-2.0-flash}
+    volumes:
+      - ./logs:/app/logs
+    restart: unless-stopped

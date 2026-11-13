@@ -1,0 +1,5 @@
+contrast,B,F,fisher_p,A,D
+"duplicate after crash+retry, B vs F",0/2,2/2,0.3333333333333333,,
+"duplicate after crash+retry, B vs A",0/2,,0.3333333333333333,2/2,
+"duplicate on double-click, B vs F",0/2,2/2,0.3333333333333333,,
+"probe constructed (key holder), B vs D",0/2,,0.3333333333333333,,2/2

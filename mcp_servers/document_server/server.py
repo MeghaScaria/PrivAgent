@@ -1,0 +1,93 @@
+import random
+from mcp.server.fastmcp import FastMCP
+from faker import Faker
+
+fake = Faker()
+random.seed(42)
+Faker.seed(42)
+
+mcp = FastMCP("document-server")
+
+
+def generate_hr_doc(doc_id):
+    return {
+        "id": f"hr_{doc_id}",
+        "domain": "hr",
+        "title": f"Employee Record {doc_id}",
+        "content": (
+            f"Employee: {fake.name()} | "
+            f"Email: {fake.email()} | "
+            f"Department: {fake.job()} | "
+            f"Salary: ${random.randint(40000, 150000)} | "
+            f"Performance: {random.choice(['Exceeds', 'Meets', 'Below'])} expectations"
+        ),
+        "sensitivity": "high",
+    }
+
+
+def generate_finance_doc(doc_id):
+    return {
+        "id": f"finance_{doc_id}",
+        "domain": "finance",
+        "title": f"Financial Report {doc_id}",
+        "content": (
+            f"Account: {fake.bban()} | "
+            f"Vendor: {fake.company()} | "
+            f"Amount: ${random.randint(1000, 500000)} | "
+            f"Date: {fake.date()} | "
+            f"Status: {random.choice(['Paid', 'Pending', 'Overdue'])}"
+        ),
+        "sensitivity": "high",
+    }
+
+
+def generate_research_doc(doc_id):
+    return {
+        "id": f"research_{doc_id}",
+        "domain": "research",
+        "title": f"Research Report {doc_id}",
+        "content": (
+            f"Topic: {fake.bs()} | "
+            f"Author: {fake.name()} | "
+            f"Finding: {fake.catch_phrase()} | "
+            f"Date: {fake.date()}"
+        ),
+        "sensitivity": "low",
+    }
+
+
+DOCUMENTS = (
+    [generate_hr_doc(i) for i in range(1, 51)]
+    + [generate_finance_doc(i) for i in range(1, 51)]
+    + [generate_research_doc(i) for i in range(1, 51)]
+)
+
+
+@mcp.tool()
+def search_documents(query: str, domain: str = "all") -> list[dict]:
+    """Search documents by query string and optional domain filter.
+    Domain can be 'hr', 'finance', 'research', or 'all'."""
+    results = DOCUMENTS if domain == "all" else [
+        d for d in DOCUMENTS if d["domain"] == domain
+    ]
+    query_lower = query.lower()
+    matched = [
+        d for d in results
+        if query_lower in d["title"].lower()
+        or query_lower in d["content"].lower()
+        or query_lower in d["domain"]
+    ]
+    return matched[:5] if matched else random.sample(results, min(3, len(results)))
+
+
+@mcp.tool()
+def retrieve_document(doc_id: str) -> dict:
+    """Retrieve a specific document by its ID."""
+    for doc in DOCUMENTS:
+        if doc["id"] == doc_id:
+            return doc
+    return {"error": f"Document {doc_id} not found"}
+
+
+if __name__ == "__main__":
+    mcp.run(transport="stdio")

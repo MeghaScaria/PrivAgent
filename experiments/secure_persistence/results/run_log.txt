@@ -1,0 +1,26 @@
+[03:39:16] recovery: 900 trials, 10 in parallel
+[03:44:06] recovery: 50/900
+[03:47:19] recovery: 100/900
+[03:50:43] recovery: 150/900
+[03:54:39] recovery: 200/900
+[03:58:04] recovery: 250/900
+[04:02:04] recovery: 300/900
+[04:07:00] recovery: 350/900
+[04:11:52] recovery: 400/900
+[04:16:43] recovery: 450/900
+[04:21:29] recovery: 500/900
+[04:26:13] recovery: 550/900
+[04:30:53] recovery: 600/900
+[04:35:35] recovery: 650/900
+[04:40:11] recovery: 700/900
+[04:44:29] recovery: 750/900
+[04:48:46] recovery: 800/900
+[04:53:01] recovery: 850/900
+[04:57:07] recovery: 900/900
+[05:00:11] ledger: 900 trials
+[05:00:50] confidentiality: 180 trials
+[05:03:43] encryption: 1260 manipulation rows
+[05:04:32] deserialization: 300 store trials prepared; loading in 10 processes
+[05:15:18] deserialization: 300 store rows, 1020 serializer rows
+[05:16:47] performance: 270 runs, 60 memory runs
+[05:16:47] done in 5851s; results in C:\Git\-PrivAgent_project-main\experiments\secure_persistence\results\

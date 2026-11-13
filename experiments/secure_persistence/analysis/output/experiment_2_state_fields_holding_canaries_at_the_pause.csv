@@ -1,0 +1,7 @@
+config,pending_fields_retained
+A,task;retrieved_documents;analysis;final_output;messages;interrupt_request
+B,task;final_output;interrupt_request
+C,task;final_output;interrupt_request
+D,task;final_output;interrupt_request
+E,task;retrieved_documents;analysis;final_output;messages;interrupt_request
+F,task;final_output;interrupt_request

@@ -1,0 +1,23 @@
+{
+  "action_level": {
+    "precision": 0.9836065573770492,
+    "recall": 1.0,
+    "f1": 0.9917355371900827,
+    "auroc": 0.9996970039144835,
+    "auprc": 0.9977297513762687,
+    "brier": 0.002171999181146973
+  },
+  "trajectory_level": {
+    "precision": 0.997920997920998,
+    "recall": 1.0,
+    "f1": 0.9989594172736732,
+    "auroc": 1.0,
+    "auprc": 1.0000000000000002,
+    "brier": 0.0001007447439351595
+  },
+  "thresholds": {
+    "autonomous_max": 0.15,
+    "restricted_max": 0.4,
+    "approval_max": 0.65
+  }
+}

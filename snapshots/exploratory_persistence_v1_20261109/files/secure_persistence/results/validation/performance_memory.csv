@@ -1,0 +1,13 @@
+config,rep,status,error,peak_traced_mb
+A,0,complete,,0.319009
+B,0,complete,,0.321084
+C,0,complete,,0.320957
+D,0,complete,,0.320962
+E,0,complete,,0.320778
+F,0,complete,,0.318693
+A,1,complete,,0.319098
+B,1,complete,,0.320574
+C,1,complete,,0.320688
+D,1,complete,,0.320762
+E,1,complete,,0.321283
+F,1,complete,,0.31813

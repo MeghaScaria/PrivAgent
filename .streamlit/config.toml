@@ -1,0 +1,24 @@
+[theme]
+base = "dark"
+backgroundColor = "#0d1117"
+secondaryBackgroundColor = "#161b22"
+textColor = "#e6edf3"
+primaryColor = "#58a6ff"
+font = "sans serif"
+
+[server]
+headless = true
+# Local development only: listen on the loopback interface, accept only
+# local host names (guards against DNS rebinding), and keep Streamlit's
+# same-origin checks so other websites can't drive the dashboard,
+# including the Human Approval page.
+address = "127.0.0.1"
+allowedHosts = ["127.0.0.1", "localhost"]
+enableCORS = true
+enableXsrfProtection = true
+
+[browser]
+gatherUsageStats = false
+
+[client]
+toolbarMode = "minimal"
