@@ -123,6 +123,20 @@ def make_nodes(monitor, service, tracker, observe, llm=None):
         decision = next((d for d in monitor.decisions if d.event_id == pending["decision_event_id"]),
                         None)
         executed = False
+        v2_binding = getattr(service, "binding", "v1") == "v2"
+        # v1 sends to the destination recorded at the gate. v2 sends to the
+        # destination currently requested and requires it to match what was
+        # approved (checked here, before the ledger claim, and again inside
+        # execute_send right before the MCP call).
+        destination = ((state.get("transmission_request") or {}).get("destination",
+                                                                      pending["destination"])
+                       if v2_binding else pending["destination"])
+        if permitted and v2_binding:
+            permitted, binding_reason = service.verify_binding(
+                pending, pending["tool"], destination,
+                tools.server_identity(pending["tool"]), state["final_output"])
+            if not permitted:
+                reason = binding_reason
         if not permitted:
             outcome = "refused"
         elif not service.ledger.claim(pending["action_id"], pending["run_id"], pending["tool"],
@@ -133,7 +147,8 @@ def make_nodes(monitor, service, tracker, observe, llm=None):
             try:
                 tools.execute_send(monitor, decision or _DecisionRef(
                     pending["decision_event_id"], pending["agent_role"]),
-                    state["final_output"], pending["destination"])
+                    state["final_output"], destination,
+                    **({"binding": (service, pending)} if v2_binding else {}))
             except Exception:
                 service.ledger.finish(pending["action_id"], "failed")
                 service.record_execution(monitor, pending, "failed", "tool_call_raised", approval)

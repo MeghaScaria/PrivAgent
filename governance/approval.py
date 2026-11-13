@@ -131,18 +131,26 @@ def _canonical(value):
 
 
 class ApprovalService:
-    def __init__(self, ledger, flow_rules=(), key=None, purge_completed=False):
+    def __init__(self, ledger, flow_rules=(), key=None, purge_completed=False, binding="v1"):
         """key: signs approvals and digests. It must be the same in every
         process that resumes a run (see governance/checkpoint_store.py);
         the random default only works within one process.
-        purge_completed: delete a thread's checkpoints once its run ends."""
+        purge_completed: delete a thread's checkpoints once its run ends.
+        binding: "v1" (default, unchanged) or "v2" (V2_PLAN.md WP3.4): the
+        approved action is also bound to the MCP server identity, and a
+        binding digest over tool, destination, server and payload is
+        recomputed from the actual call parameters right before execution
+        (verify_binding, called by agents.tools.execute_send)."""
         unknown = set(flow_rules) - set(FLOW_RULES)
         if unknown:
             raise ValueError(f"Unknown flow rules: {sorted(unknown)}")
+        if binding not in ("v1", "v2"):
+            raise ValueError("binding must be 'v1' or 'v2'")
         self.ledger = ledger
         self.flow_rules = tuple(flow_rules)
         self._key = key or secrets.token_bytes(32)
         self.purge_completed = purge_completed
+        self.binding = binding
 
     # -- digests and tokens -------------------------------------------
     def _digest(self, value):
@@ -150,6 +158,21 @@ class ApprovalService:
 
     def _token(self, action_id, action_digest, reviewer):
         return self._digest({"approved": action_id, "digest": action_digest, "by": reviewer})
+
+    def binding_digest(self, tool, destination, server, payload):
+        """v2: keyed digest over everything that decides where data goes."""
+        return self._digest({"tool": tool, "destination": destination, "server": server,
+                             "payload_digest": self._digest(payload)})
+
+    def verify_binding(self, pending, tool, destination, server, payload):
+        """v2: recomputes the binding digest from the parameters of the call
+        about to be made. (ok, reason)."""
+        if pending.get("binding") != "v2" or "binding_digest" not in pending:
+            return False, "no_v2_binding_on_pending_action"
+        actual = self.binding_digest(tool, destination, server, payload)
+        if not hmac.compare_digest(actual, pending["binding_digest"]):
+            return False, "binding_mismatch:tool_destination_server_or_payload_changed"
+        return True, "binding_verified"
 
     # -- gate ---------------------------------------------------------
     def gate(self, monitor, decision, payload, destination):
@@ -174,6 +197,10 @@ class ApprovalService:
             "payload_digest": self._digest(payload),
             "decision_event_id": decision.event_id,
         }
+        if self.binding == "v2":
+            from agents.mcp_client import server_identity
+            action["server"] = server_identity(action["tool"])
+            action["binding"] = "v2"
         pending = {
             **action,
             "action_digest": self._digest(action),
@@ -190,6 +217,9 @@ class ApprovalService:
             "needs_review": final == HUMAN_APPROVAL,
             "requested_at": time.time(),
         }
+        if self.binding == "v2":
+            pending["binding_digest"] = self.binding_digest(
+                action["tool"], destination, action["server"], payload)
         pending["gate_overhead_ms"] = round((time.perf_counter() - started) * 1000, 3)
         self._record(monitor, "gate", pending)
         if fired:

@@ -47,6 +47,15 @@ TOOL_TO_SERVER = {
 }
 
 
+def server_identity(tool_name):
+    """The MCP server a call to tool_name is routed to: its name and the
+    server script (relative to the repo). Used by v2 send binding; it
+    reads the same routing tables the client uses."""
+    name = TOOL_TO_SERVER[tool_name]
+    return {"server": name,
+            "script": os.path.relpath(SERVERS[name], BASE_DIR).replace(os.sep, "/")}
+
+
 class MCPClientManager:
     _instance = None
     _instance_lock = threading.Lock()

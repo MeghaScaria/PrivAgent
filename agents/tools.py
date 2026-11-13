@@ -5,7 +5,7 @@ happens: the wrapper asks "is this allowed?" before it ever reaches the
 MCP client, and returns a structured result either way so the calling
 agent (and the dashboard) can see exactly what happened.
 """
-from agents.mcp_client import get_mcp_manager
+from agents.mcp_client import get_mcp_manager, server_identity
 
 def _blocked_response(decision):
     return {
@@ -134,9 +134,25 @@ def evaluate_send(monitor, agent_role, contains_sensitive_data):
     )
 
 
-def execute_send(monitor, decision, payload, destination="external"):
+class SendBindingError(RuntimeError):
+    """v2: the send about to be made is not the one that was approved."""
+
+
+def execute_send(monitor, decision, payload, destination="external", binding=None):
     """The MCP half of send_result. Callers must have checked that the
-    decision (or a verified human approval) permits it."""
+    decision (or a verified human approval) permits it.
+
+    binding (v2, optional): (ApprovalService, pending action). The binding
+    digest over tool, destination, server identity and payload is
+    recomputed from THIS call's arguments and the client's current routing
+    right before the MCP call; any mismatch raises SendBindingError and
+    nothing is sent. Without it (v1), behaviour is unchanged."""
+    if binding is not None:
+        service, pending = binding
+        ok, reason = service.verify_binding(pending, "send_result", destination,
+                                            server_identity("send_result"), payload)
+        if not ok:
+            raise SendBindingError(reason)
     return _call(monitor, decision, "send_result", {"payload": payload, "destination": destination})
 
 

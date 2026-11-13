@@ -37,7 +37,9 @@ import sqlite3
 import subprocess
 import sys
 
+from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from langgraph.checkpoint.serde.base import CipherProtocol
 from langgraph.checkpoint.serde.encrypted import EncryptedSerializer
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
@@ -53,6 +55,8 @@ MASTER_KEY_FILE = "master.key"
 MASTER_KEY_ENV = "PRIVAGENT_MASTER_KEY"
 CIPHER_NAME = "aesgcm"
 _AAD = b"privagent-checkpoint-v1"
+_AAD_V2 = b"privagent-checkpoint-v2"
+DEFAULT_DIR_V2 = os.path.join(DEFAULT_DIR, "v2")
 _BROAD_PRINCIPALS = ("Everyone", "BUILTIN\\Users", "Authenticated Users", "NT AUTHORITY\\Authenticated")
 
 
@@ -128,20 +132,52 @@ def derive_key(master, purpose):
     return hmac.new(master, purpose.encode("utf-8"), hashlib.sha256).digest()
 
 
+# v2 (V2_PLAN.md WP3.2): HKDF-SHA256 with one info label per purpose. The
+# raw master key is never used as a key itself.
+APPROVAL_SIGN_INFO = b"privagent/approval-sign/v2"
+CHECKPOINT_ENC_INFO = b"privagent/checkpoint-enc/v2"
+
+
+def hkdf_key(master, info):
+    return HKDF(algorithm=hashes.SHA256(), length=32, salt=None, info=info).derive(master)
+
+
+def read_master_key(directory):
+    """The existing master key, read-only: never created, rewritten or
+    re-permissioned (v2 must not touch runtime/approvals/master.key).
+    PRIVAGENT_MASTER_KEY overrides it, as in v1."""
+    from_env = os.environ.get(MASTER_KEY_ENV)
+    if from_env:
+        key = bytes.fromhex(from_env)
+        if len(key) != 32:
+            raise ValueError(f"{MASTER_KEY_ENV} must be 32 bytes (64 hex characters)")
+        return key
+    path = os.path.join(directory, MASTER_KEY_FILE)
+    if not os.path.exists(path):
+        raise FileNotFoundError(f"{path} not found; create it with a v1 DevApprovalStore first "
+                                f"or set {MASTER_KEY_ENV}")
+    with open(path, "rb") as f:
+        key = f.read()
+    if len(key) != 32:
+        raise ValueError(f"{path} is not a valid 32-byte key")
+    return key
+
+
 # -- serializer ----------------------------------------------------------
 
 class AesGcmCipher(CipherProtocol):
-    def __init__(self, key):
+    def __init__(self, key, aad=_AAD):
         self._aead = AESGCM(key)
+        self._aad = aad
 
     def encrypt(self, plaintext):
         nonce = secrets.token_bytes(12)
-        return CIPHER_NAME, nonce + self._aead.encrypt(nonce, plaintext, _AAD)
+        return CIPHER_NAME, nonce + self._aead.encrypt(nonce, plaintext, self._aad)
 
     def decrypt(self, ciphername, ciphertext):
         if ciphername != CIPHER_NAME:
             raise ValueError(f"Unsupported checkpoint cipher: {ciphername!r}")
-        return self._aead.decrypt(ciphertext[:12], ciphertext[12:], _AAD)
+        return self._aead.decrypt(ciphertext[:12], ciphertext[12:], self._aad)
 
 
 class StrictEncryptedSerializer(EncryptedSerializer):
@@ -156,10 +192,10 @@ class StrictEncryptedSerializer(EncryptedSerializer):
         return super().loads_typed(data)
 
 
-def strict_serializer(key):
+def strict_serializer(key, aad=_AAD):
     serde = JsonPlusSerializer(pickle_fallback=False, allowed_json_modules=None,
                                allowed_msgpack_modules=None)
-    return StrictEncryptedSerializer(AesGcmCipher(key), serde)
+    return StrictEncryptedSerializer(AesGcmCipher(key, aad), serde)
 
 
 # -- store ---------------------------------------------------------------
@@ -169,23 +205,43 @@ class DevApprovalStore:
     directory. Every process that opens the same directory sees the
     same paused runs and can resume them."""
 
-    def __init__(self, directory=None, flow_rules=()):
-        self.directory = _private_dir(directory or DEFAULT_DIR)
-        master = load_master_key(self.directory)
+    def __init__(self, directory=None, flow_rules=(), governance_version="v1",
+                 master_key_dir=None):
+        """governance_version="v1" (default): unchanged. "v2": checkpoints
+        and ledger in their own files under runtime/approvals/v2/ (or
+        `directory`), keys derived with HKDF from the master key in
+        master_key_dir (default runtime/approvals/, read-only), and
+        approvals bound to tool, destination, server and payload
+        (ApprovalService binding="v2")."""
+        if governance_version not in ("v1", "v2"):
+            raise ValueError("governance_version must be 'v1' or 'v2'")
+        self.governance_version = governance_version
+        if governance_version == "v2":
+            self.directory = _private_dir(directory or DEFAULT_DIR_V2)
+            master = read_master_key(master_key_dir or DEFAULT_DIR)
+            checkpoint_key = hkdf_key(master, CHECKPOINT_ENC_INFO)
+            approval_key = hkdf_key(master, APPROVAL_SIGN_INFO)
+            aad, binding = _AAD_V2, "v2"
+        else:
+            self.directory = _private_dir(directory or DEFAULT_DIR)
+            master = load_master_key(self.directory)
+            checkpoint_key = derive_key(master, "checkpoint-aes-gcm")
+            approval_key = derive_key(master, "approval-service")
+            aad, binding = _AAD, "v1"
+        del master
         self.checkpoint_path = os.path.join(self.directory, CHECKPOINT_DB)
         self.ledger_path = os.path.join(self.directory, LEDGER_DB)
 
         self._conn = sqlite3.connect(self.checkpoint_path, check_same_thread=False)
         make_private(self.checkpoint_path)
-        self.checkpointer = SqliteSaver(self._conn, serde=strict_serializer(
-            derive_key(master, "checkpoint-aes-gcm")))
+        self.checkpointer = SqliteSaver(self._conn, serde=strict_serializer(checkpoint_key, aad))
         self.checkpointer.setup()
 
         self.ledger = ExecutionLedger(self.ledger_path)
         make_private(self.ledger_path)
+        service_kwargs = {"binding": "v2"} if binding == "v2" else {}
         self.service = ApprovalService(self.ledger, flow_rules=flow_rules,
-                                       key=derive_key(master, "approval-service"),
-                                       purge_completed=True)
+                                       key=approval_key, purge_completed=True, **service_kwargs)
 
     def access_problems(self):
         return {p: check_private(p) for p in (self.directory, self.checkpoint_path,

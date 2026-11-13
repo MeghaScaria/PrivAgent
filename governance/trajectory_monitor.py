@@ -134,7 +134,7 @@ class TrajectoryMonitor:
     def __init__(self, model_type="trajectory", run_id=None, task_type="multi_hop_research",
                  agent_count=3, policy_engine=None, audit_logger=None,
                  handoff_mode="shadow", sensitivity_mode="shadow",
-                 governance_version="v1", precedence=None):
+                 governance_version="v1", precedence=None, restricted_semantics=None):
         if governance_version not in GOVERNANCE_VERSIONS:
             raise ValueError(f"governance_version must be one of {GOVERNANCE_VERSIONS}")
         precedence = precedence or DEFAULT_PRECEDENCE[governance_version]
@@ -142,6 +142,10 @@ class TrajectoryMonitor:
             raise ValueError(f"precedence must be one of {PRECEDENCES}")
         self.governance_version = governance_version
         self.precedence = precedence
+        # V2_PLAN.md WP3.3. Off in v1 (RESTRICTED behaves like AUTONOMOUS).
+        self.restricted_semantics = (governance_version == "v2" if restricted_semantics is None
+                                     else bool(restricted_semantics))
+        self.restricted_refs = set()   # tool-result refs produced by RESTRICTED actions
         if handoff_mode not in HANDOFF_MODES:
             raise ValueError(f"handoff_mode must be one of {HANDOFF_MODES}")
         if sensitivity_mode not in SENSITIVITY_MODES:
@@ -247,14 +251,20 @@ class TrajectoryMonitor:
             "destination_category": destination_category,
         }
         risk_score, final_decision, source, reason, combination = self._decide(candidate_action)
+        if self.restricted_semantics:
+            final_decision, source, reason, combination = self._apply_restricted(
+                final_decision, source, reason, combination, agent_role, destination_category)
         export = self.governance_version == "v2"
         allowed = final_decision in ALLOWED_DECISIONS
 
         if sensitivity and sensitivity["authoritative"] != enforced_sensitivity:
             # What governance would have decided with the authoritative
             # label. Recorded only: nothing here changes the trajectory.
-            s_risk, s_decision, s_source, s_reason, _ = self._decide(
+            s_risk, s_decision, s_source, s_reason, s_comb = self._decide(
                 {**candidate_action, "data_sensitivity": sensitivity["authoritative"]})
+            if self.restricted_semantics:
+                s_decision, s_source, s_reason, _ = self._apply_restricted(
+                    s_decision, s_source, s_reason, s_comb, agent_role, destination_category)
             shadow = {"data_sensitivity": sensitivity["authoritative"],
                       "risk_score": round(s_risk, 4), "decision": s_decision,
                       "source": s_source, "reason": s_reason,
@@ -283,13 +293,61 @@ class TrajectoryMonitor:
 
         return decision
 
+    # -- v2 RESTRICTED semantics (V2_PLAN.md WP3.3) ---------------------
+    def restricted_lineage(self, agent_role):
+        """Restricted-lineage refs this agent's inputs trace back to. With
+        provenance off, any executed RESTRICTED action counts (fail closed)."""
+        if self.handoff_mode == "off":
+            return ["(provenance off)"] if any(
+                d.decision == "RESTRICTED" and d.allowed for d in self.decisions) else []
+        reg = self.provenance
+        received = reg.agent_inputs.get(agent_role, [])
+        origins = {o for r in received for o in reg.origins(r)}
+        return sorted(origins & self.restricted_refs, key=_ref_order)
+
+    def mark_restricted_lineage(self, ref_ids):
+        """Marks refs as produced under RESTRICTED. Tool results of RESTRICTED
+        actions are marked automatically (register_tool_result); a scored
+        RESTRICTED handoff (WP2) marks the ref it produces here."""
+        self.restricted_refs.update(ref_ids)
+
+    def _apply_restricted(self, final, source, reason, combination, agent_role, destination):
+        """RESTRICTED may run only against an internal destination (or a
+        cross-agent handoff, whose output then carries restricted lineage).
+        RESTRICTED + external -> HUMAN_APPROVAL. An allowed external action
+        whose inputs carry restricted lineage -> HUMAN_APPROVAL. Escalation
+        only: nothing here relaxes a decision."""
+        escalation, lineage = None, []
+        if destination == "external" and final == "RESTRICTED":
+            escalation = "restricted_external"
+            reason = ("RESTRICTED action may only run against an internal destination; "
+                      "external transmission escalated to human approval")
+        elif destination == "external" and final in ALLOWED_DECISIONS:
+            lineage = self.restricted_lineage(agent_role)
+            if lineage:
+                escalation = "restricted_lineage"
+                reason = ("Outbound data traces back to output of a RESTRICTED action "
+                          f"({', '.join(lineage)}); escalated to human approval")
+        combination = dict(combination)
+        combination["restricted_escalation"] = escalation
+        if escalation:
+            final, source = "HUMAN_APPROVAL", "restricted_rule"
+            combination.update({"final_decision": final, "decided_by": "restricted_rule",
+                                "restricted_lineage_refs": lineage,
+                                "would_differ_under_v1": final != combination["v1_decision"],
+                                "downgraded_ml": SEVERITY[final] < SEVERITY[combination["ml_decision"]]})
+        return final, source, reason, combination
+
     def register_tool_result(self, decision, tool_name, args, result):
         """Called by the tool wrappers after an allowed call returns.
         Blocked calls return nothing, so nothing is registered for them."""
         if self.handoff_mode == "off":
             return []
-        return self.provenance.register_tool_result(
+        refs = self.provenance.register_tool_result(
             tool_name, args, result, decision.event_id, decision.action["agent_role"])
+        if self.restricted_semantics and getattr(decision, "decision", None) == "RESTRICTED":
+            self.mark_restricted_lineage(refs)
+        return refs
 
     def record_handoff(self, event_type, sender, receiver, payload, consumed=None,
                        produced_ref=None, authorized=True, flags=None, details=None):
