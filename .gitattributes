@@ -1,0 +1,11 @@
+# Frozen artifacts are stored and checked out byte-exact: no line-ending
+# conversion, whatever core.autocrlf is set to. Their SHA-256 manifests
+# and the frozen-file checks depend on the exact bytes.
+models/** -text
+snapshots/** -text
+experiments/results/** -text
+experiments/secure_persistence/** -text
+research_paper/final/** -text
+research_paper/evidence/** -text
+logs/*.jsonl -text
+*.patch -text
