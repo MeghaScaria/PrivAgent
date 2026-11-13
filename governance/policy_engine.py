@@ -62,3 +62,36 @@ class PolicyEngine:
             )
 
         return None, None
+
+    def evaluate_all(self, trajectory_prefix, candidate_action):
+        """Every rule that fires, in rule order (v2, WP1). evaluate() above
+        is unchanged and returns only the first of these; v1 uses it.
+
+        Returns [{"rule_id": "R1", "decision": "BLOCKED", "reason": ...}, ...],
+        empty if no rule fires. The conditions and reasons are the same as
+        in evaluate(); tests check that evaluate() always equals the first
+        entry here."""
+        sensitive_reads = sum(
+            1 for a in trajectory_prefix if int(a["data_sensitivity"]) == 1
+        )
+        cross_agent_hops = sum(
+            1 for a in trajectory_prefix if a["destination_category"] == "cross_agent"
+        )
+        external = candidate_action["destination_category"] == "external"
+        fired = []
+        if (candidate_action["tool_name"] == "send_result" and external and
+                sensitive_reads >= self.max_sensitive_reads_before_external):
+            fired.append({"rule_id": "R1", "decision": "BLOCKED", "reason": (
+                f"Policy rule: external transmission blocked after "
+                f"{sensitive_reads} prior sensitive-data reads in this task "
+                f"(limit: {self.max_sensitive_reads_before_external})")})
+        if int(candidate_action["data_sensitivity"]) == 1 and external:
+            fired.append({"rule_id": "R2", "decision": "HUMAN_APPROVAL", "reason": (
+                "Policy rule: sensitive data proposed for direct external "
+                "transmission always requires human approval")})
+        if external and cross_agent_hops >= self.max_cross_agent_hops_before_external:
+            fired.append({"rule_id": "R3", "decision": "BLOCKED", "reason": (
+                f"Policy rule: external transmission blocked after "
+                f"{cross_agent_hops} cross-agent handoffs in this task "
+                f"(limit: {self.max_cross_agent_hops_before_external})")})
+        return fired

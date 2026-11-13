@@ -45,6 +45,8 @@ class AuditLogger:
             "risk_score": round(float(risk_score), 4),
             "decision": decision,
             "source": source,           # "ml_model" or "policy_engine"
+            # v2 records also carry "combination" (via extra): ML score and
+            # decision, every rule fired, precedence, the v1 comparison.
             "reason": reason,
             "trajectory_length": trajectory_length,
             "task_type": task_type,
@@ -114,9 +116,18 @@ class AuditLogger:
 
 _default_logger = None
 
+# v2 (V2_PLAN.md §0): v2 runs never append to the v1 logs in logs/*.jsonl.
+LOG_FILE_V2 = os.path.join(LOG_DIR, "v2", "audit_log.jsonl")
+_default_logger_v2 = None
 
-def get_audit_logger():
-    global _default_logger
+
+def get_audit_logger(governance_version="v1"):
+    """The shared logger: logs/ for v1 (unchanged), logs/v2/ for v2."""
+    global _default_logger, _default_logger_v2
+    if governance_version == "v2":
+        if _default_logger_v2 is None:
+            _default_logger_v2 = AuditLogger(LOG_FILE_V2)
+        return _default_logger_v2
     if _default_logger is None:
         _default_logger = AuditLogger()
     return _default_logger

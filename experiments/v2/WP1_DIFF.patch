@@ -1,0 +1,748 @@
+--- a/governance/policy_engine.py
++++ b/governance/policy_engine.py
+@@ -62,3 +62,36 @@
+             )
+ 
+         return None, None
++
++    def evaluate_all(self, trajectory_prefix, candidate_action):
++        """Every rule that fires, in rule order (v2, WP1). evaluate() above
++        is unchanged and returns only the first of these; v1 uses it.
++
++        Returns [{"rule_id": "R1", "decision": "BLOCKED", "reason": ...}, ...],
++        empty if no rule fires. The conditions and reasons are the same as
++        in evaluate(); tests check that evaluate() always equals the first
++        entry here."""
++        sensitive_reads = sum(
++            1 for a in trajectory_prefix if int(a["data_sensitivity"]) == 1
++        )
++        cross_agent_hops = sum(
++            1 for a in trajectory_prefix if a["destination_category"] == "cross_agent"
++        )
++        external = candidate_action["destination_category"] == "external"
++        fired = []
++        if (candidate_action["tool_name"] == "send_result" and external and
++                sensitive_reads >= self.max_sensitive_reads_before_external):
++            fired.append({"rule_id": "R1", "decision": "BLOCKED", "reason": (
++                f"Policy rule: external transmission blocked after "
++                f"{sensitive_reads} prior sensitive-data reads in this task "
++                f"(limit: {self.max_sensitive_reads_before_external})")})
++        if int(candidate_action["data_sensitivity"]) == 1 and external:
++            fired.append({"rule_id": "R2", "decision": "HUMAN_APPROVAL", "reason": (
++                "Policy rule: sensitive data proposed for direct external "
++                "transmission always requires human approval")})
++        if external and cross_agent_hops >= self.max_cross_agent_hops_before_external:
++            fired.append({"rule_id": "R3", "decision": "BLOCKED", "reason": (
++                f"Policy rule: external transmission blocked after "
++                f"{cross_agent_hops} cross-agent handoffs in this task "
++                f"(limit: {self.max_cross_agent_hops_before_external})")})
++        return fired
+--- a/governance/audit_logger.py
++++ b/governance/audit_logger.py
+@@ -45,6 +45,8 @@
+             "risk_score": round(float(risk_score), 4),
+             "decision": decision,
+             "source": source,           # "ml_model" or "policy_engine"
++            # v2 records also carry "combination" (via extra): ML score and
++            # decision, every rule fired, precedence, the v1 comparison.
+             "reason": reason,
+             "trajectory_length": trajectory_length,
+             "task_type": task_type,
+@@ -114,9 +116,18 @@
+ 
+ _default_logger = None
+ 
++# v2 (V2_PLAN.md §0): v2 runs never append to the v1 logs in logs/*.jsonl.
++LOG_FILE_V2 = os.path.join(LOG_DIR, "v2", "audit_log.jsonl")
++_default_logger_v2 = None
+ 
+-def get_audit_logger():
+-    global _default_logger
++
++def get_audit_logger(governance_version="v1"):
++    """The shared logger: logs/ for v1 (unchanged), logs/v2/ for v2."""
++    global _default_logger, _default_logger_v2
++    if governance_version == "v2":
++        if _default_logger_v2 is None:
++            _default_logger_v2 = AuditLogger(LOG_FILE_V2)
++        return _default_logger_v2
+     if _default_logger is None:
+         _default_logger = AuditLogger()
+     return _default_logger
+--- a/governance/trajectory_monitor.py
++++ b/governance/trajectory_monitor.py
+@@ -31,6 +31,18 @@
+ of one per-run sequence counter, so the full order of a run can be
+ rebuilt from the logs. The sequence number is log metadata only and is
+ never a model feature.
++
++Decision combination (V2_PLAN.md WP1). governance_version="v1" (the
++default) reproduces v1 exactly: precedence "first_fire_v1", where the
++first firing rule REPLACES the ML decision, so R2 can turn an ML BLOCKED
++into HUMAN_APPROVAL. governance_version="v2" defaults to precedence
++"max_severity": final = the most severe of the ML decision and every
++firing rule (AUTONOMOUS < RESTRICTED < HUMAN_APPROVAL < BLOCKED), so a
++rule can only escalate. Both versions compute the same combination
++record (ML score and decision, rules fired, final decision, the v1
++decision for comparison); only v2 exports it, in to_dict() and the
++audit log, so v1 output is unchanged. v2 monitors log to logs/v2/ by
++default.
+ """
+ import uuid
+ from datetime import datetime, timezone
+@@ -43,6 +55,35 @@
+ HANDOFF_MODES = ("shadow", "off")
+ SENSITIVITY_MODES = ("shadow", "enforce")
+ ALLOWED_DECISIONS = ("AUTONOMOUS", "RESTRICTED")
++GOVERNANCE_VERSIONS = ("v1", "v2")
++PRECEDENCES = ("first_fire_v1", "max_severity")
++DEFAULT_PRECEDENCE = {"v1": "first_fire_v1", "v2": "max_severity"}
++SEVERITY = {"AUTONOMOUS": 0, "RESTRICTED": 1, "HUMAN_APPROVAL": 2, "BLOCKED": 3}
++
++
++def combine_decisions(ml_decision, fired, precedence):
++    """The final decision from the ML decision and the rules that fired
++    (fired: PolicyEngine.evaluate_all output, in rule order).
++
++    first_fire_v1: the first firing rule replaces the ML decision.
++    max_severity: the most severe of the ML decision and all fired rules.
++
++    Returns (final_decision, rule_index or None, decided_by). rule_index
++    points into fired at the rule whose decision (and reason) is final;
++    None means the ML decision stands."""
++    if precedence == "first_fire_v1":
++        if fired:
++            return fired[0]["decision"], 0, "policy_engine"
++        return ml_decision, None, "ml_model"
++    if not fired:
++        return ml_decision, None, "ml_model"
++    top = max(range(len(fired)), key=lambda i: (SEVERITY[fired[i]["decision"]], -i))
++    rule_decision = fired[top]["decision"]
++    if SEVERITY[rule_decision] > SEVERITY[ml_decision]:
++        return rule_decision, top, "policy_engine"
++    if SEVERITY[rule_decision] == SEVERITY[ml_decision]:
++        return ml_decision, None, "ml_model+policy_engine"
++    return ml_decision, None, "ml_model"
+ 
+ 
+ def _ref_order(ref_id):
+@@ -51,8 +92,11 @@
+ 
+ class GovernanceDecision:
+     def __init__(self, allowed, decision, risk_score, source, reason, action,
+-                 event_id=None, seq=None, sensitivity=None, flags=None, shadow=None):
++                 event_id=None, seq=None, sensitivity=None, flags=None, shadow=None,
++                 combination=None, export_combination=False):
+         self.allowed = allowed
++        self.combination = combination
++        self._export_combination = export_combination
+         self.decision = decision
+         self.risk_score = risk_score
+         self.source = source
+@@ -65,6 +109,12 @@
+         self.shadow = shadow
+ 
+     def to_dict(self):
++        d = self._to_dict_v1()
++        if self._export_combination:
++            d["combination"] = self.combination
++        return d
++
++    def _to_dict_v1(self):
+         return {
+             "allowed": self.allowed,
+             "decision": self.decision,
+@@ -83,7 +133,15 @@
+ class TrajectoryMonitor:
+     def __init__(self, model_type="trajectory", run_id=None, task_type="multi_hop_research",
+                  agent_count=3, policy_engine=None, audit_logger=None,
+-                 handoff_mode="shadow", sensitivity_mode="shadow"):
++                 handoff_mode="shadow", sensitivity_mode="shadow",
++                 governance_version="v1", precedence=None):
++        if governance_version not in GOVERNANCE_VERSIONS:
++            raise ValueError(f"governance_version must be one of {GOVERNANCE_VERSIONS}")
++        precedence = precedence or DEFAULT_PRECEDENCE[governance_version]
++        if precedence not in PRECEDENCES:
++            raise ValueError(f"precedence must be one of {PRECEDENCES}")
++        self.governance_version = governance_version
++        self.precedence = precedence
+         if handoff_mode not in HANDOFF_MODES:
+             raise ValueError(f"handoff_mode must be one of {HANDOFF_MODES}")
+         if sensitivity_mode not in SENSITIVITY_MODES:
+@@ -93,7 +151,7 @@
+         self.risk_engine = RiskEngine(model_type=model_type)
+         self.controller = AutonomyController()
+         self.policy_engine = policy_engine or PolicyEngine()
+-        self.audit_logger = audit_logger or get_audit_logger()
++        self.audit_logger = audit_logger or get_audit_logger(governance_version)
+         self.run_id = run_id or str(uuid.uuid4())[:8]
+         self.task_type = task_type
+         self.agent_count = agent_count
+@@ -114,13 +172,40 @@
+             self.trajectory, candidate_action, self.task_type, self.agent_count
+         )
+         ml_decision = self.controller.decide(risk_score)
++        ml_reason = f"Trajectory-aware risk model scored this action at {risk_score:.3f}"
++        # The v1 decision, computed exactly as in v1 (evaluate() unchanged).
+         policy_override, policy_reason = self.policy_engine.evaluate(
+             self.trajectory, candidate_action
+         )
+         if policy_override is not None:
+-            return risk_score, policy_override, "policy_engine", policy_reason
+-        return (risk_score, ml_decision, "ml_model",
+-                f"Trajectory-aware risk model scored this action at {risk_score:.3f}")
++            v1 = (policy_override, "policy_engine", policy_reason)
++        else:
++            v1 = (ml_decision, "ml_model", ml_reason)
++
++        fired = self.policy_engine.evaluate_all(self.trajectory, candidate_action)
++        if self.precedence == "first_fire_v1":
++            final, source, reason = v1
++            rule_decision = fired[0]["decision"] if fired else None
++            decided_by = source
++        else:
++            final, idx, decided_by = combine_decisions(ml_decision, fired, self.precedence)
++            source = "policy_engine" if idx is not None else "ml_model"
++            reason = fired[idx]["reason"] if idx is not None else ml_reason
++            rule_decision = (max((f["decision"] for f in fired), key=SEVERITY.get)
++                             if fired else None)
++        record = {
++            "ml_score": round(float(risk_score), 4),
++            "ml_decision": ml_decision,
++            "rules_fired": [{"rule_id": f["rule_id"], "decision": f["decision"]} for f in fired],
++            "rule_decision": rule_decision,
++            "final_decision": final,
++            "decided_by": decided_by,
++            "precedence": self.precedence,
++            "v1_decision": v1[0],
++            "would_differ_under_v1": final != v1[0],
++            "downgraded_ml": SEVERITY[final] < SEVERITY[ml_decision],
++        }
++        return risk_score, final, source, reason, record
+ 
+     def outbound_provenance(self, agent_role):
+         if self.handoff_mode == "off":
+@@ -161,13 +246,14 @@
+             "data_sensitivity": enforced_sensitivity,
+             "destination_category": destination_category,
+         }
+-        risk_score, final_decision, source, reason = self._decide(candidate_action)
++        risk_score, final_decision, source, reason, combination = self._decide(candidate_action)
++        export = self.governance_version == "v2"
+         allowed = final_decision in ALLOWED_DECISIONS
+ 
+         if sensitivity and sensitivity["authoritative"] != enforced_sensitivity:
+             # What governance would have decided with the authoritative
+             # label. Recorded only: nothing here changes the trajectory.
+-            s_risk, s_decision, s_source, s_reason = self._decide(
++            s_risk, s_decision, s_source, s_reason, _ = self._decide(
+                 {**candidate_action, "data_sensitivity": sensitivity["authoritative"]})
+             shadow = {"data_sensitivity": sensitivity["authoritative"],
+                       "risk_score": round(s_risk, 4), "decision": s_decision,
+@@ -179,6 +265,7 @@
+             allowed=allowed, decision=final_decision, risk_score=risk_score,
+             source=source, reason=reason, action=candidate_action,
+             event_id=event_id, seq=seq, sensitivity=sensitivity, flags=flags, shadow=shadow,
++            combination=combination, export_combination=export,
+         )
+         self.decisions.append(decision)
+ 
+@@ -188,6 +275,7 @@
+             reason=reason, trajectory_length=len(self.trajectory),
+             task_type=self.task_type, event_id=event_id, seq=seq,
+             sensitivity=sensitivity, flags=flags, shadow=shadow,
++            combination=combination if export else None,
+         )
+ 
+         if allowed:
+--- /dev/null
++++ b/tests/test_precedence_v2.py
+@@ -0,0 +1,163 @@
++"""
++V2_PLAN.md WP1: escalation-only decision combination.
++
++Runs the governance layer directly (TrajectoryMonitor.evaluate with the
++saved model and the real PolicyEngine); no MCP servers or LLM needed.
++Every monitor here logs to a temporary directory, never to logs/.
++
++    python tests/test_precedence_v2.py
++"""
++import itertools
++import json
++import os
++import random
++import sys
++import tempfile
++
++sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
++
++from governance.audit_logger import LOG_FILE, LOG_FILE_V2, AuditLogger  # noqa: E402
++from governance.policy_engine import PolicyEngine  # noqa: E402
++from governance.trajectory_monitor import (  # noqa: E402
++    SEVERITY, TrajectoryMonitor, combine_decisions,
++)
++
++DECISIONS = list(SEVERITY)
++ROLES = ["orchestrator", "retriever", "analyst", "writer"]
++TOOLS = {"search_documents": "read", "retrieve_document": "read", "query_database": "query",
++         "search_web": "read", "send_result": "transmit"}
++DESTS = ["internal", "cross_agent", "external"]
++
++
++def _monitor(version="v1", **kw):
++    logger = AuditLogger(os.path.join(tempfile.mkdtemp(), "audit_log.jsonl"))
++    return TrajectoryMonitor(run_id="t", audit_logger=logger, governance_version=version, **kw), logger
++
++
++def _demo_9e6a8ae2_pattern(monitor):
++    """The persisted demo run demo_9e6a8ae2: one sensitive HR read, then
++    the writer sends a declared-sensitive answer externally. R1 does not
++    fire (fewer than 2 prior sensitive actions), R2 does."""
++    monitor.evaluate("retriever", "search_documents", "read", 1, "internal")
++    return monitor.evaluate("writer", "send_result", "transmit", 1, "external")
++
++
++def test_demo_9e6a8ae2_pattern_blocked_under_max_severity_approval_under_v1():
++    v1, _ = _monitor("v1")
++    d1 = _demo_9e6a8ae2_pattern(v1)
++    v2, _ = _monitor("v2")
++    d2 = _demo_9e6a8ae2_pattern(v2)
++
++    assert d1.combination["ml_decision"] == "BLOCKED", d1.combination
++    assert d1.combination["ml_score"] >= 0.85
++    assert [r["rule_id"] for r in d1.combination["rules_fired"]] == ["R2"]
++
++    assert d1.decision == "HUMAN_APPROVAL" and d1.source == "policy_engine"
++    assert d2.decision == "BLOCKED" and not d2.allowed
++    assert d2.combination["precedence"] == "max_severity"
++    assert d2.combination["v1_decision"] == "HUMAN_APPROVAL"
++    assert d2.combination["would_differ_under_v1"] is True
++    assert d2.combination["downgraded_ml"] is False
++    assert d1.combination["downgraded_ml"] is True
++    assert d1.risk_score == d2.risk_score
++
++
++def test_no_v2_decision_less_severe_than_ml_exhaustive():
++    """combine_decisions over every ML decision and every ordered subset
++    of rule outcomes."""
++    rule_options = [("R1", "BLOCKED"), ("R2", "HUMAN_APPROVAL"), ("R3", "BLOCKED")]
++    for ml in DECISIONS:
++        for n in range(len(rule_options) + 1):
++            for subset in itertools.combinations(rule_options, n):
++                fired = [{"rule_id": r, "decision": d, "reason": r} for r, d in subset]
++                final, _, _ = combine_decisions(ml, fired, "max_severity")
++                assert SEVERITY[final] >= SEVERITY[ml], (ml, subset, final)
++                for f in fired:
++                    assert SEVERITY[final] >= SEVERITY[f["decision"]]
++
++
++def test_no_v2_decision_less_severe_than_ml_live_monitor():
++    """Random runs through the live monitor (saved model + real rules)."""
++    rng = random.Random(0)
++    downgrades_v1 = 0
++    for run in range(150):
++        v2, _ = _monitor("v2")
++        for _ in range(rng.randint(1, 10)):
++            tool = rng.choice(list(TOOLS))
++            dest = "external" if tool == "send_result" else rng.choice(DESTS)
++            d = v2.evaluate(rng.choice(ROLES), tool, TOOLS[tool], rng.randint(0, 1), dest)
++            c = d.combination
++            assert SEVERITY[d.decision] >= SEVERITY[c["ml_decision"]], c
++            assert not c["downgraded_ml"]
++            downgrades_v1 += SEVERITY[c["v1_decision"]] < SEVERITY[c["ml_decision"]]
++    assert downgrades_v1 > 0, "the sweep should include v1 downgrade cases"
++
++
++def test_evaluate_equals_first_of_evaluate_all():
++    pe = PolicyEngine()
++    actions = [{"tool_name": t, "data_sensitivity": s, "destination_category": d}
++               for t in TOOLS for s in (0, 1) for d in DESTS]
++    rng = random.Random(1)
++    for _ in range(3000):
++        prefix = [rng.choice(actions) for _ in range(rng.randint(0, 6))]
++        cand = rng.choice(actions)
++        decision, reason = pe.evaluate(prefix, cand)
++        fired = pe.evaluate_all(prefix, cand)
++        if decision is None:
++            assert fired == []
++        else:
++            assert (fired[0]["decision"], fired[0]["reason"]) == (decision, reason)
++
++
++def test_v1_default_output_unchanged():
++    """Default monitor: v1 precedence, no combination in to_dict or the log."""
++    m, logger = _monitor()
++    assert m.governance_version == "v1" and m.precedence == "first_fire_v1"
++    d = _demo_9e6a8ae2_pattern(m)
++    assert "combination" not in d.to_dict()
++    with open(logger.log_file, encoding="utf-8") as f:
++        lines = [json.loads(x) for x in f]
++    assert all("combination" not in e for e in lines)
++    assert lines[-1]["decision"] == "HUMAN_APPROVAL" and lines[-1]["source"] == "policy_engine"
++
++
++def test_v2_records_carry_full_combination():
++    m, logger = _monitor("v2")
++    d = _demo_9e6a8ae2_pattern(m)
++    keys = {"ml_score", "ml_decision", "rules_fired", "rule_decision", "final_decision",
++            "decided_by", "precedence", "v1_decision", "would_differ_under_v1", "downgraded_ml"}
++    assert keys <= set(d.to_dict()["combination"])
++    with open(logger.log_file, encoding="utf-8") as f:
++        last = json.loads(f.readlines()[-1])
++    assert keys <= set(last["combination"])
++    assert last["decision"] == last["combination"]["final_decision"] == "BLOCKED"
++
++
++def test_v2_precedence_override_and_validation():
++    m, _ = _monitor("v2", precedence="first_fire_v1")
++    assert _demo_9e6a8ae2_pattern(m).decision == "HUMAN_APPROVAL"
++    for bad in ({"governance_version": "v3"}, {"precedence": "min"}):
++        try:
++            TrajectoryMonitor(run_id="t", audit_logger=AuditLogger(
++                os.path.join(tempfile.mkdtemp(), "a.jsonl")), **bad)
++        except ValueError:
++            continue
++        raise AssertionError(f"accepted {bad}")
++
++
++def test_v2_default_log_location_is_separate():
++    assert os.path.dirname(LOG_FILE_V2) == os.path.join(os.path.dirname(LOG_FILE), "v2")
++
++
++if __name__ == "__main__":
++    tests = [(n, f) for n, f in sorted(globals().items()) if n.startswith("test_") and callable(f)]
++    failed = 0
++    for name, fn in tests:
++        try:
++            fn()
++            print(f"PASS {name}")
++        except Exception as exc:  # noqa: BLE001
++            failed += 1
++            print(f"FAIL {name}: {exc!r}")
++    print(f"\n{len(tests) - failed}/{len(tests)} passed")
++    sys.exit(1 if failed else 0)
+--- /dev/null
++++ b/experiments/v2/precedence_ablation.py
+@@ -0,0 +1,322 @@
++"""
++V2_PLAN.md WP1, item 4: decision-precedence ablation.
++
++Configurations (all with the frozen v1 model, thresholds and rules):
++  ml_only        the ML decision alone (thresholds 0.22 / 0.50 / 0.85)
++  rules_only     the policy rules alone, first match wins (R1, R2, R3), else
++                 AUTONOMOUS. A deterministic PEP baseline in the *style* of
++                 Wang et al. (2026); it is not a reimplementation of their system.
++  first_fire_v1  v1: the first firing rule replaces the ML decision
++  max_severity   v2: the most severe of the ML decision and every firing rule
++
++The final decision for first_fire_v1 / max_severity comes from
++governance.trajectory_monitor.combine_decisions and the rules from
++PolicyEngine.evaluate_all: the same code the live monitor runs.
++
++Offline convention (as in models/train_models.py): each step is scored
++against the full generated prefix of its run, whatever earlier steps were
++decided. A step counts as stopped when its final decision is
++HUMAN_APPROVAL or BLOCKED.
++
++Metrics per (seed, set, configuration): step recall and FPR; run recall
++(attack runs with at least one unsafe step stopped); benign-run false
++alarm (any step stopped); approval volume (benign runs with any step
++sent to HUMAN_APPROVAL, the human cost); benign block rate (any step
++BLOCKED); unsafe steps to approval (unsafe steps whose final decision is
++HUMAN_APPROVAL, i.e. executable if a reviewer approves); downgrade events (steps whose final decision is less severe than
++the ML decision), and those where ML said BLOCKED. For H1 in the draft
++pre-registration: the max_severity - first_fire_v1 difference in benign
++approval volume (and in benign block rate, and in any stop), pooled over
++seeds, with a 95% bootstrap CI over benign runs, resampled within seed.
++
++DEVELOPMENT MODE (default): train/val splits and variant C only, which is
++what V2_PLAN.md §0.4 allows before the pre-registration is frozen. The test
++split and held-out sets are generated (the generator draws them in one
++stream) but discarded unread, exactly as experiments/phase3_flow_features.py
++does. --confirmatory is refused unless experiments/v2/PREREGISTRATION_HASHES.md
++records the current SHA-256 of experiments/v2/PREREGISTRATION_v2.md.
++Note: for seed 42 the train split is the frozen model's own training data
++(in-sample); seeds 7 and 1234 are fresh draws from the same generator.
++
++    python experiments/v2/precedence_ablation.py            # development
++    python experiments/v2/precedence_ablation.py --confirmatory   # after freeze
++"""
++import argparse
++import hashlib
++import json
++import os
++import pickle
++import sys
++
++import numpy as np
++import pandas as pd
++
++ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
++sys.path.insert(0, ROOT)
++
++from data.generate_trajectories import generate_dataset, generate_dev_variants  # noqa: E402
++from governance.features import (  # noqa: E402
++    ACTION_TYPES, AGENT_ROLES, DESTINATION_CATEGORIES, TOOL_NAMES,
++)
++from governance.policy_engine import PolicyEngine  # noqa: E402
++from governance.risk_engine import AutonomyController  # noqa: E402
++from governance.trajectory_monitor import ALLOWED_DECISIONS, SEVERITY, combine_decisions  # noqa: E402
++from models.train_models import GROUP_COL, LABEL_COL, evaluate_set, split_by_trajectory  # noqa: E402
++
++V2_DIR = os.path.join(ROOT, "experiments", "v2")
++OUT_DIR = os.path.join(V2_DIR, "results")
++MODELS_DIR = os.path.join(ROOT, "models")
++PREREG = os.path.join(V2_DIR, "PREREGISTRATION_v2.md")
++PREREG_HASHES = os.path.join(V2_DIR, "PREREGISTRATION_HASHES.md")
++
++SEEDS = [42, 7, 1234]          # the data seeds of experiments/phase3_flow_features.py
++CONFIGS = ["ml_only", "rules_only", "first_fire_v1", "max_severity"]
++DEV_SETS = ["train", "val", "variant_c"]
++CONFIRMATORY_SETS = ["test", "holdout_types", "holdout_variants"]
++BOOTSTRAP_REPS = 2000
++
++_DECODE = {
++    "agent_role": {v: k for k, v in AGENT_ROLES.items()},
++    "tool_name": {v: k for k, v in TOOL_NAMES.items()},
++    "action_type": {v: k for k, v in ACTION_TYPES.items()},
++    "destination_category": {v: k for k, v in DESTINATION_CATEGORIES.items()},
++}
++
++
++def prereg_frozen():
++    """True only if PREREGISTRATION_HASHES.md contains the current SHA-256
++    of PREREGISTRATION_v2.md."""
++    if not (os.path.exists(PREREG) and os.path.exists(PREREG_HASHES)):
++        return False
++    with open(PREREG, "rb") as f:
++        digest = hashlib.sha256(f.read()).hexdigest()
++    with open(PREREG_HASHES, encoding="utf-8") as f:
++        return digest in f.read()
++
++
++def load_frozen():
++    with open(os.path.join(MODELS_DIR, "trajectory_level_model.pkl"), "rb") as f:
++        model = pickle.load(f)
++    with open(os.path.join(MODELS_DIR, "feature_config.json"), encoding="utf-8") as f:
++        features = json.load(f)["trajectory_level"]
++    with open(os.path.join(MODELS_DIR, "thresholds.json"), encoding="utf-8") as f:
++        thresholds = json.load(f)
++    return model, features, thresholds
++
++
++def decode(row):
++    return {
++        "agent_role": _DECODE["agent_role"][int(row["agent_role"])],
++        "tool_name": _DECODE["tool_name"][int(row["tool_name"])],
++        "action_type": _DECODE["action_type"][int(row["action_type"])],
++        "data_sensitivity": int(row["data_sensitivity"]),
++        "destination_category": _DECODE["destination_category"][int(row["destination_category"])],
++    }
++
++
++def decide_all(df, model, features, controller, policy):
++    """One row per step: ML score/decision, fired rules, and the final
++    decision under every configuration."""
++    scores = model.predict_proba(df[features])[:, 1]
++    cols = ["agent_role", "tool_name", "action_type", "data_sensitivity", "destination_category"]
++    out = {c: [] for c in CONFIGS}
++    ml_decisions = [controller.decide(float(s)) for s in scores]
++    # Rows of a run are contiguous and in step order in the generator
++    # output, so walking the frame in order rebuilds every prefix.
++    assert _contiguous(df[GROUP_COL])
++    all_fired, prefix, current = [], [], None
++    for row in df[cols + [GROUP_COL]].itertuples(index=False):
++        if row[-1] != current:
++            prefix, current = [], row[-1]
++        cand = decode(dict(zip(cols, row[:-1])))
++        fired = policy.evaluate_all(prefix, cand)
++        prefix.append(cand)
++        all_fired.append(fired)
++        out["rules_only"].append(fired[0]["decision"] if fired else "AUTONOMOUS")
++    for ml, fired in zip(ml_decisions, all_fired):
++        out["ml_only"].append(ml)
++        out["first_fire_v1"].append(combine_decisions(ml, fired, "first_fire_v1")[0])
++        out["max_severity"].append(combine_decisions(ml, fired, "max_severity")[0])
++    res = df[[GROUP_COL, LABEL_COL, "attack_type"]].copy()
++    res["ml_score"] = scores
++    res["ml_decision"] = ml_decisions
++    for c in CONFIGS:
++        res[c] = out[c]
++    return res
++
++
++def _contiguous(ids):
++    seen, prev = set(), None
++    for x in ids:
++        if x != prev:
++            if x in seen:
++                return False
++            seen.add(x)
++            prev = x
++    return True
++
++
++def metrics(res, config):
++    final = res[config]
++    stopped = ~final.isin(ALLOWED_DECISIONS)
++    sev_final = final.map(SEVERITY)
++    sev_ml = res["ml_decision"].map(SEVERITY)
++    unsafe = res[LABEL_COL] == 1
++    benign = res["attack_type"] == "benign"
++    g_benign = res.loc[benign, GROUP_COL]
++    downgrade = sev_final < sev_ml
++
++    def run_any(mask, rows):
++        return pd.Series(mask[rows].to_numpy()).groupby(res.loc[rows, GROUP_COL].to_numpy()).any()
++
++    run_caught = run_any(stopped, unsafe) if unsafe.any() else pd.Series(dtype=bool)
++    per_type = {}
++    for t, g in res[unsafe].groupby("attack_type"):
++        s = stopped[g.index]
++        per_type[t] = {"step_recall": float(s.mean()),
++                       "run_recall": float(s.groupby(g[GROUP_COL]).any().mean())}
++    return {
++        "step_recall": float(stopped[unsafe].mean()) if unsafe.any() else None,
++        "step_fpr": float(stopped[~unsafe].mean()),
++        "run_recall": float(run_caught.mean()) if len(run_caught) else None,
++        "benign_runs": int(g_benign.nunique()),
++        "benign_run_false_alarm": float(run_any(stopped, benign).mean()) if benign.any() else None,
++        "approval_volume": float(run_any(final == "HUMAN_APPROVAL", benign).mean()) if benign.any() else None,
++        "benign_block_rate": float(run_any(final == "BLOCKED", benign).mean()) if benign.any() else None,
++        # Unsafe steps left to a reviewer: stopped in the default graph,
++        # but executable after approval in the approval graph. This is
++        # where first_fire_v1 and max_severity differ in security terms.
++        "unsafe_steps_to_approval": (float((final[unsafe] == "HUMAN_APPROVAL").mean())
++                                     if unsafe.any() else None),
++        "downgrade_events": int(downgrade.sum()),
++        "downgrade_events_ml_blocked": int((downgrade & (res["ml_decision"] == "BLOCKED")).sum()),
++        "downgrade_events_unsafe_steps": int((downgrade & unsafe).sum()),
++        "per_attack_type": per_type,
++    }
++
++
++def benign_run_flags(res, config):
++    """Per benign run: (seed, run id) -> any approval, any block, any stop."""
++    b = res[res["attack_type"] == "benign"]
++    f = b[config]
++    return pd.DataFrame({
++        "approval": (f == "HUMAN_APPROVAL").groupby(b[GROUP_COL]).any(),
++        "block": (f == "BLOCKED").groupby(b[GROUP_COL]).any(),
++        "stop": (~f.isin(ALLOWED_DECISIONS)).groupby(b[GROUP_COL]).any(),
++    })
++
++
++def bootstrap_diff(per_seed_pairs, column, reps=BOOTSTRAP_REPS, seed=0):
++    """per_seed_pairs: [(flags_v1, flags_v2)] per seed, aligned by run id.
++    Pooled mean difference (v2 - v1) and a 95% percentile CI, resampling
++    benign runs within each seed."""
++    rng = np.random.default_rng(seed)
++    diffs = [(b[column].to_numpy(int) - a[column].to_numpy(int)) for a, b in per_seed_pairs]
++    point = float(np.concatenate(diffs).mean())
++    boots = np.empty(reps)
++    for i in range(reps):
++        boots[i] = np.concatenate([d[rng.integers(0, len(d), len(d))] for d in diffs]).mean()
++    lo, hi = np.percentile(boots, [2.5, 97.5])
++    return {"diff": point, "ci95": [float(lo), float(hi)]}
++
++
++def build_sets(seed, confirmatory):
++    data = generate_dataset(seed=seed, write_csv=False)
++    train, val, test = split_by_trajectory(data["main"])
++    sets = {"train": train, "val": val, "variant_c": generate_dev_variants(seed)}
++    if confirmatory:
++        sets.update({"test": test, "holdout_types": data["holdout_types"],
++                     "holdout_variants": data["holdout_variants"]})
++    # otherwise test and the held-out sets are discarded unread
++    return sets
++
++
++def main():
++    ap = argparse.ArgumentParser()
++    ap.add_argument("--confirmatory", action="store_true",
++                    help="also score test / held-out types / variant B (needs a frozen pre-registration)")
++    args = ap.parse_args()
++    if args.confirmatory and not prereg_frozen():
++        sys.exit("Refused: experiments/v2/PREREGISTRATION_HASHES.md does not record the current "
++                 "SHA-256 of PREREGISTRATION_v2.md. Freeze the pre-registration first.")
++    mode = "confirmatory" if args.confirmatory else "development"
++    set_names = DEV_SETS + (CONFIRMATORY_SETS if args.confirmatory else [])
++
++    model, features, thresholds = load_frozen()
++    controller = AutonomyController(thresholds=thresholds)
++    policy = PolicyEngine()
++
++    report = {"mode": mode, "seeds": SEEDS, "sets": set_names, "configs": CONFIGS,
++              "thresholds": thresholds, "per_seed": {}, "pooled_h1": {}}
++    pairs = {s: [] for s in set_names}
++    for seed in SEEDS:
++        sets = build_sets(seed, args.confirmatory)
++        report["per_seed"][str(seed)] = {}
++        for name in set_names:
++            df = sets[name].reset_index(drop=True)
++            res = decide_all(df, model, features, controller, policy)
++            if seed == 42 and name == "val":
++                # Sanity: ml_only reproduces the v1 evaluation operating point.
++                ref = evaluate_set(df, res["ml_score"].to_numpy(), thresholds["restricted_max"])
++                ml_stop = ~res["ml_only"].isin(ALLOWED_DECISIONS)
++                assert abs(float(ml_stop[res[LABEL_COL] == 1].mean()) - ref["recall"]) < 1e-12
++            report["per_seed"][str(seed)][name] = {c: metrics(res, c) for c in CONFIGS}
++            pairs[name].append((benign_run_flags(res, "first_fire_v1"),
++                                benign_run_flags(res, "max_severity")))
++            print(f"seed {seed} {name}: done")
++    for name in set_names:
++        report["pooled_h1"][name] = {col: bootstrap_diff(pairs[name], col)
++                                     for col in ("approval", "block", "stop")}
++
++    os.makedirs(OUT_DIR, exist_ok=True)
++    stem = os.path.join(OUT_DIR, f"precedence_ablation_{'dev' if mode == 'development' else 'confirmatory'}")
++    with open(stem + ".json", "w", encoding="utf-8") as f:
++        json.dump(report, f, indent=2)
++    with open(stem + ".md", "w", encoding="utf-8") as f:
++        f.write(render_md(report))
++    print("wrote", stem + ".json", "and .md")
++
++
++def render_md(report):
++    def mean_over_seeds(name, config, key):
++        vals = [report["per_seed"][str(s)][name][config][key] for s in report["seeds"]]
++        vals = [v for v in vals if v is not None]
++        return sum(vals) / len(vals) if vals else None
++
++    def total_over_seeds(name, config, key):
++        return sum(report["per_seed"][str(s)][name][config][key] for s in report["seeds"])
++
++    lines = [f"# Decision-precedence ablation ({report['mode'].upper()})", ""]
++    if report["mode"] == "development":
++        lines += ["**Development run: train/val splits and variant C only.** No test, held-out-type "
++                  "or variant-B data was scored. Not a confirmatory result.", ""]
++    lines += [f"Frozen v1 model and thresholds {report['thresholds']}; seeds {report['seeds']}; "
++              "offline convention (each step scored against its full generated prefix). Means over "
++              "seeds; downgrade counts are totals. Seed 42 train is the model's own training data.", ""]
++    hdr = ("| Set | Config | Step recall | Run recall | Step FPR | Benign false alarm | "
++           "Approval volume | Benign block rate | Unsafe steps to approval | "
++           "Downgrades (all / ML BLOCKED / unsafe) |")
++    lines += [hdr, "|" + "---|" * 10]
++    for name in report["sets"]:
++        for c in report["configs"]:
++            f = lambda k: mean_over_seeds(name, c, k)  # noqa: E731
++            fmt = lambda v: "–" if v is None else f"{v:.3f}"  # noqa: E731
++            lines.append(
++                f"| {name} | {c} | {fmt(f('step_recall'))} | {fmt(f('run_recall'))} | "
++                f"{fmt(f('step_fpr'))} | {fmt(f('benign_run_false_alarm'))} | "
++                f"{fmt(f('approval_volume'))} | {fmt(f('benign_block_rate'))} | "
++                f"{fmt(f('unsafe_steps_to_approval'))} | "
++                f"{total_over_seeds(name, c, 'downgrade_events')} / "
++                f"{total_over_seeds(name, c, 'downgrade_events_ml_blocked')} / "
++                f"{total_over_seeds(name, c, 'downgrade_events_unsafe_steps')} |")
++    lines += ["", "## max_severity minus first_fire_v1, benign runs (pooled over seeds; 95% bootstrap CI)", "",
++              "| Set | Approval volume | Block rate | Any stop |", "|---|---|---|---|"]
++    for name in report["sets"]:
++        h = report["pooled_h1"][name]
++        cell = lambda d: f"{d['diff']:+.4f} [{d['ci95'][0]:+.4f}, {d['ci95'][1]:+.4f}]"  # noqa: E731
++        lines.append(f"| {name} | {cell(h['approval'])} | {cell(h['block'])} | {cell(h['stop'])} |")
++    return "\n".join(lines) + "\n"
++
++
++if __name__ == "__main__":
++    main()

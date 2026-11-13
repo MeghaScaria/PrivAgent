@@ -31,6 +31,18 @@ Every event in a run (tool decisions and handoffs) gets the next value
 of one per-run sequence counter, so the full order of a run can be
 rebuilt from the logs. The sequence number is log metadata only and is
 never a model feature.
+
+Decision combination (V2_PLAN.md WP1). governance_version="v1" (the
+default) reproduces v1 exactly: precedence "first_fire_v1", where the
+first firing rule REPLACES the ML decision, so R2 can turn an ML BLOCKED
+into HUMAN_APPROVAL. governance_version="v2" defaults to precedence
+"max_severity": final = the most severe of the ML decision and every
+firing rule (AUTONOMOUS < RESTRICTED < HUMAN_APPROVAL < BLOCKED), so a
+rule can only escalate. Both versions compute the same combination
+record (ML score and decision, rules fired, final decision, the v1
+decision for comparison); only v2 exports it, in to_dict() and the
+audit log, so v1 output is unchanged. v2 monitors log to logs/v2/ by
+default.
 """
 import uuid
 from datetime import datetime, timezone
@@ -43,6 +55,35 @@ from governance.sensitivity import authoritative_label
 HANDOFF_MODES = ("shadow", "off")
 SENSITIVITY_MODES = ("shadow", "enforce")
 ALLOWED_DECISIONS = ("AUTONOMOUS", "RESTRICTED")
+GOVERNANCE_VERSIONS = ("v1", "v2")
+PRECEDENCES = ("first_fire_v1", "max_severity")
+DEFAULT_PRECEDENCE = {"v1": "first_fire_v1", "v2": "max_severity"}
+SEVERITY = {"AUTONOMOUS": 0, "RESTRICTED": 1, "HUMAN_APPROVAL": 2, "BLOCKED": 3}
+
+
+def combine_decisions(ml_decision, fired, precedence):
+    """The final decision from the ML decision and the rules that fired
+    (fired: PolicyEngine.evaluate_all output, in rule order).
+
+    first_fire_v1: the first firing rule replaces the ML decision.
+    max_severity: the most severe of the ML decision and all fired rules.
+
+    Returns (final_decision, rule_index or None, decided_by). rule_index
+    points into fired at the rule whose decision (and reason) is final;
+    None means the ML decision stands."""
+    if precedence == "first_fire_v1":
+        if fired:
+            return fired[0]["decision"], 0, "policy_engine"
+        return ml_decision, None, "ml_model"
+    if not fired:
+        return ml_decision, None, "ml_model"
+    top = max(range(len(fired)), key=lambda i: (SEVERITY[fired[i]["decision"]], -i))
+    rule_decision = fired[top]["decision"]
+    if SEVERITY[rule_decision] > SEVERITY[ml_decision]:
+        return rule_decision, top, "policy_engine"
+    if SEVERITY[rule_decision] == SEVERITY[ml_decision]:
+        return ml_decision, None, "ml_model+policy_engine"
+    return ml_decision, None, "ml_model"
 
 
 def _ref_order(ref_id):
@@ -51,8 +92,11 @@ def _ref_order(ref_id):
 
 class GovernanceDecision:
     def __init__(self, allowed, decision, risk_score, source, reason, action,
-                 event_id=None, seq=None, sensitivity=None, flags=None, shadow=None):
+                 event_id=None, seq=None, sensitivity=None, flags=None, shadow=None,
+                 combination=None, export_combination=False):
         self.allowed = allowed
+        self.combination = combination
+        self._export_combination = export_combination
         self.decision = decision
         self.risk_score = risk_score
         self.source = source
@@ -65,6 +109,12 @@ class GovernanceDecision:
         self.shadow = shadow
 
     def to_dict(self):
+        d = self._to_dict_v1()
+        if self._export_combination:
+            d["combination"] = self.combination
+        return d
+
+    def _to_dict_v1(self):
         return {
             "allowed": self.allowed,
             "decision": self.decision,
@@ -83,7 +133,15 @@ class GovernanceDecision:
 class TrajectoryMonitor:
     def __init__(self, model_type="trajectory", run_id=None, task_type="multi_hop_research",
                  agent_count=3, policy_engine=None, audit_logger=None,
-                 handoff_mode="shadow", sensitivity_mode="shadow"):
+                 handoff_mode="shadow", sensitivity_mode="shadow",
+                 governance_version="v1", precedence=None):
+        if governance_version not in GOVERNANCE_VERSIONS:
+            raise ValueError(f"governance_version must be one of {GOVERNANCE_VERSIONS}")
+        precedence = precedence or DEFAULT_PRECEDENCE[governance_version]
+        if precedence not in PRECEDENCES:
+            raise ValueError(f"precedence must be one of {PRECEDENCES}")
+        self.governance_version = governance_version
+        self.precedence = precedence
         if handoff_mode not in HANDOFF_MODES:
             raise ValueError(f"handoff_mode must be one of {HANDOFF_MODES}")
         if sensitivity_mode not in SENSITIVITY_MODES:
@@ -93,7 +151,7 @@ class TrajectoryMonitor:
         self.risk_engine = RiskEngine(model_type=model_type)
         self.controller = AutonomyController()
         self.policy_engine = policy_engine or PolicyEngine()
-        self.audit_logger = audit_logger or get_audit_logger()
+        self.audit_logger = audit_logger or get_audit_logger(governance_version)
         self.run_id = run_id or str(uuid.uuid4())[:8]
         self.task_type = task_type
         self.agent_count = agent_count
@@ -114,13 +172,40 @@ class TrajectoryMonitor:
             self.trajectory, candidate_action, self.task_type, self.agent_count
         )
         ml_decision = self.controller.decide(risk_score)
+        ml_reason = f"Trajectory-aware risk model scored this action at {risk_score:.3f}"
+        # The v1 decision, computed exactly as in v1 (evaluate() unchanged).
         policy_override, policy_reason = self.policy_engine.evaluate(
             self.trajectory, candidate_action
         )
         if policy_override is not None:
-            return risk_score, policy_override, "policy_engine", policy_reason
-        return (risk_score, ml_decision, "ml_model",
-                f"Trajectory-aware risk model scored this action at {risk_score:.3f}")
+            v1 = (policy_override, "policy_engine", policy_reason)
+        else:
+            v1 = (ml_decision, "ml_model", ml_reason)
+
+        fired = self.policy_engine.evaluate_all(self.trajectory, candidate_action)
+        if self.precedence == "first_fire_v1":
+            final, source, reason = v1
+            rule_decision = fired[0]["decision"] if fired else None
+            decided_by = source
+        else:
+            final, idx, decided_by = combine_decisions(ml_decision, fired, self.precedence)
+            source = "policy_engine" if idx is not None else "ml_model"
+            reason = fired[idx]["reason"] if idx is not None else ml_reason
+            rule_decision = (max((f["decision"] for f in fired), key=SEVERITY.get)
+                             if fired else None)
+        record = {
+            "ml_score": round(float(risk_score), 4),
+            "ml_decision": ml_decision,
+            "rules_fired": [{"rule_id": f["rule_id"], "decision": f["decision"]} for f in fired],
+            "rule_decision": rule_decision,
+            "final_decision": final,
+            "decided_by": decided_by,
+            "precedence": self.precedence,
+            "v1_decision": v1[0],
+            "would_differ_under_v1": final != v1[0],
+            "downgraded_ml": SEVERITY[final] < SEVERITY[ml_decision],
+        }
+        return risk_score, final, source, reason, record
 
     def outbound_provenance(self, agent_role):
         if self.handoff_mode == "off":
@@ -161,13 +246,14 @@ class TrajectoryMonitor:
             "data_sensitivity": enforced_sensitivity,
             "destination_category": destination_category,
         }
-        risk_score, final_decision, source, reason = self._decide(candidate_action)
+        risk_score, final_decision, source, reason, combination = self._decide(candidate_action)
+        export = self.governance_version == "v2"
         allowed = final_decision in ALLOWED_DECISIONS
 
         if sensitivity and sensitivity["authoritative"] != enforced_sensitivity:
             # What governance would have decided with the authoritative
             # label. Recorded only: nothing here changes the trajectory.
-            s_risk, s_decision, s_source, s_reason = self._decide(
+            s_risk, s_decision, s_source, s_reason, _ = self._decide(
                 {**candidate_action, "data_sensitivity": sensitivity["authoritative"]})
             shadow = {"data_sensitivity": sensitivity["authoritative"],
                       "risk_score": round(s_risk, 4), "decision": s_decision,
@@ -179,6 +265,7 @@ class TrajectoryMonitor:
             allowed=allowed, decision=final_decision, risk_score=risk_score,
             source=source, reason=reason, action=candidate_action,
             event_id=event_id, seq=seq, sensitivity=sensitivity, flags=flags, shadow=shadow,
+            combination=combination, export_combination=export,
         )
         self.decisions.append(decision)
 
@@ -188,6 +275,7 @@ class TrajectoryMonitor:
             reason=reason, trajectory_length=len(self.trajectory),
             task_type=self.task_type, event_id=event_id, seq=seq,
             sensitivity=sensitivity, flags=flags, shadow=shadow,
+            combination=combination if export else None,
         )
 
         if allowed:
