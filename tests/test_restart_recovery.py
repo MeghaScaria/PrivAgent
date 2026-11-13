@@ -51,10 +51,14 @@ TIMEOUT = 120
 class Worker:
     def __init__(self, command, store, thread, marker, *extra):
         env = {k: v for k, v in os.environ.items() if k != "PRIVAGENT_MASTER_KEY"}
+        # The worker's stderr goes to a temp log file (not DEVNULL), so a
+        # failing test can show why the worker stopped.
+        fd, self.stderr_path = tempfile.mkstemp(prefix=f"restart_worker_{command}_", suffix=".log")
+        self._stderr = os.fdopen(fd, "w", encoding="utf-8")
         self.proc = subprocess.Popen(
             [sys.executable, WORKER, command, "--store", store, "--thread", thread,
              "--marker", marker, *extra],
-            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, env=env, cwd=ROOT)
+            stdout=subprocess.PIPE, stderr=self._stderr, text=True, env=env, cwd=ROOT)
         self.lines = queue.Queue()
         threading.Thread(target=self._read, daemon=True).start()
 
@@ -67,8 +71,19 @@ class Worker:
 
     def next_event(self):
         event = self.lines.get(timeout=TIMEOUT)
-        assert event is not None, f"worker exited early (code {self.proc.poll()})"
+        assert event is not None, (f"worker exited early (code {self.proc.poll()}); "
+                                   f"stderr: {self.stderr_path}\n{self.stderr_tail()}")
         return event
+
+    def stderr_tail(self, lines=25):
+        """Last lines of the worker's stderr log, warnings left out."""
+        self._stderr.flush()
+        try:
+            with open(self.stderr_path, encoding="utf-8", errors="replace") as f:
+                text = [x.rstrip() for x in f if "Warning" not in x and x.strip()]
+        except OSError as exc:
+            return f"(could not read stderr log: {exc})"
+        return "\n".join(text[-lines:])
 
     def events_until_exit(self):
         events = []

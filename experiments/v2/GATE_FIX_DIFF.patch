@@ -1,0 +1,132 @@
+--- a/agents/mcp_client.py
++++ b/agents/mcp_client.py
+@@ -47,6 +47,22 @@
+ }
+ 
+ 
++START_TIMEOUT_ENV = "PRIVAGENT_MCP_START_TIMEOUT"
++DEFAULT_START_TIMEOUT = 30
++
++
++def start_timeout():
++    """Seconds to wait for all MCP servers to connect. Default 30 (the
++    original value); PRIVAGENT_MCP_START_TIMEOUT overrides it, e.g. on a
++    slow or heavily loaded machine. Invalid or non-positive values are
++    ignored."""
++    try:
++        value = float(os.environ.get(START_TIMEOUT_ENV, DEFAULT_START_TIMEOUT))
++    except ValueError:
++        return DEFAULT_START_TIMEOUT
++    return value if value > 0 else DEFAULT_START_TIMEOUT
++
++
+ def server_identity(tool_name):
+     """The MCP server a call to tool_name is routed to: its name and the
+     server script (relative to the repo). Used by v2 send binding; it
+@@ -81,7 +97,7 @@
+             return
+         self._thread = threading.Thread(target=self._run_loop, daemon=True)
+         self._thread.start()
+-        self._started.wait(timeout=30)
++        self._started.wait(timeout=start_timeout())
+         if self._start_error:
+             raise RuntimeError(f"Failed to start MCP servers: {self._start_error}")
+ 
+--- a/tests/test_restart_recovery.py
++++ b/tests/test_restart_recovery.py
+@@ -51,10 +51,14 @@
+ class Worker:
+     def __init__(self, command, store, thread, marker, *extra):
+         env = {k: v for k, v in os.environ.items() if k != "PRIVAGENT_MASTER_KEY"}
++        # The worker's stderr goes to a temp log file (not DEVNULL), so a
++        # failing test can show why the worker stopped.
++        fd, self.stderr_path = tempfile.mkstemp(prefix=f"restart_worker_{command}_", suffix=".log")
++        self._stderr = os.fdopen(fd, "w", encoding="utf-8")
+         self.proc = subprocess.Popen(
+             [sys.executable, WORKER, command, "--store", store, "--thread", thread,
+              "--marker", marker, *extra],
+-            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, env=env, cwd=ROOT)
++            stdout=subprocess.PIPE, stderr=self._stderr, text=True, env=env, cwd=ROOT)
+         self.lines = queue.Queue()
+         threading.Thread(target=self._read, daemon=True).start()
+ 
+@@ -67,9 +71,20 @@
+ 
+     def next_event(self):
+         event = self.lines.get(timeout=TIMEOUT)
+-        assert event is not None, f"worker exited early (code {self.proc.poll()})"
++        assert event is not None, (f"worker exited early (code {self.proc.poll()}); "
++                                   f"stderr: {self.stderr_path}\n{self.stderr_tail()}")
+         return event
+ 
++    def stderr_tail(self, lines=25):
++        """Last lines of the worker's stderr log, warnings left out."""
++        self._stderr.flush()
++        try:
++            with open(self.stderr_path, encoding="utf-8", errors="replace") as f:
++                text = [x.rstrip() for x in f if "Warning" not in x and x.strip()]
++        except OSError as exc:
++            return f"(could not read stderr log: {exc})"
++        return "\n".join(text[-lines:])
++
+     def events_until_exit(self):
+         events = []
+         while True:
+--- /dev/null
++++ b/experiments/v2/DEVIATIONS.md
+@@ -0,0 +1,55 @@
++# Deliberate deviations from V2_PLAN.md
++
++Each entry records where the implementation knowingly differs from the plan, why, and how to
++undo it. These are decisions, approved by the project owner, not defects.
++
++## D1. WP3.3: restricted lineage also comes from internal RESTRICTED tool calls
++
++- **Plan:** RESTRICTED + `cross_agent` (a scored handoff) is allowed, and the produced ref is marked
++  `restricted_lineage=True`. Any later external send carrying restricted lineage → HUMAN_APPROVAL.
++- **Implemented:**
++  - Refs produced by a scored RESTRICTED handoff are marked through `mark_restricted_lineage()`
++    (wired for WP2).
++  - In addition, the tool-result refs of **internal** RESTRICTED tool calls are marked
++    automatically (`TrajectoryMonitor.register_tool_result`).
++  - The later-send check follows provenance origins, so lineage propagates through handoffs and
++    derived objects (`TrajectoryMonitor.restricted_lineage`).
++- **Reason:** in the live pipeline every tool action is `internal` or `external`, and `cross_agent`
++  actions do not exist until WP2. Under the plan's wording, the lineage rule could therefore never
++  fire live. Data read under a RESTRICTED decision and later sent outside is exactly what the rule
++  is meant to catch.
++- **Effect:**
++  - v2 only; v1 is unaffected, because `restricted_semantics` is off unless
++    `governance_version="v2"`.
++  - The development count is in `experiments/v2/results/restricted_semantics_dev.md`: 0 of 1,059
++    benign validation runs escalated (offline upper bound).
++  - Covered by `tests/test_hygiene_v2.py::test_restricted_internal_runs_and_lineage_escalates_later_send`.
++- **To revert:** drop the `mark_restricted_lineage(refs)` call in `register_tool_result`.
++- **Approved:** 14 Nov 2026.
++
++## D2. WP3.4: `server_identity()` helper in `agents/mcp_client.py`
++
++- **Plan:** the binding digest covers the MCP server identity (`TOOL_TO_SERVER[tool]`). The plan does
++  not list `agents/mcp_client.py` among the files to change.
++- **Implemented:** a read-only helper `server_identity(tool)` in `agents/mcp_client.py` returns
++  `{"server": name, "script": <server script path relative to the repo>}`. It is built from the same
++  `TOOL_TO_SERVER` and `SERVERS` tables that the client uses to route calls.
++- **Reason:**
++  - The identity checked at execution time should come from the routing the client will actually
++    use, not from a separate copy such as the one in `governance/provenance.py`.
++  - Including the script path also binds the approval to which server program receives the call,
++    not only to its name.
++- **Effect:**
++  - No behavioural change.
++  - Used only by v2 binding (`ApprovalService(binding="v2")` and `agents.tools.execute_send(..., binding=...)`).
++- **Approved:** 14 Nov 2026.
++
++## Related change outside the plan (not a deviation of a work package)
++
++- `PRIVAGENT_MCP_START_TIMEOUT`: an environment variable for the MCP startup wait, in
++  `agents/mcp_client.py`.
++  - The default is unchanged at 30 s.
++  - It was added because, on a loaded machine, the four stdio servers did not all connect within
++    30 s. That made the regression gate fail the same way on pre-WP1 code.
++- `tests/test_restart_recovery.py`: the restart worker's stderr goes to a temporary log file
++  instead of `DEVNULL`. Test-only, so a failing worker shows its cause.

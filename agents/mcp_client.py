@@ -47,6 +47,22 @@ TOOL_TO_SERVER = {
 }
 
 
+START_TIMEOUT_ENV = "PRIVAGENT_MCP_START_TIMEOUT"
+DEFAULT_START_TIMEOUT = 30
+
+
+def start_timeout():
+    """Seconds to wait for all MCP servers to connect. Default 30 (the
+    original value); PRIVAGENT_MCP_START_TIMEOUT overrides it, e.g. on a
+    slow or heavily loaded machine. Invalid or non-positive values are
+    ignored."""
+    try:
+        value = float(os.environ.get(START_TIMEOUT_ENV, DEFAULT_START_TIMEOUT))
+    except ValueError:
+        return DEFAULT_START_TIMEOUT
+    return value if value > 0 else DEFAULT_START_TIMEOUT
+
+
 def server_identity(tool_name):
     """The MCP server a call to tool_name is routed to: its name and the
     server script (relative to the repo). Used by v2 send binding; it
@@ -81,7 +97,7 @@ class MCPClientManager:
             return
         self._thread = threading.Thread(target=self._run_loop, daemon=True)
         self._thread.start()
-        self._started.wait(timeout=30)
+        self._started.wait(timeout=start_timeout())
         if self._start_error:
             raise RuntimeError(f"Failed to start MCP servers: {self._start_error}")
 
