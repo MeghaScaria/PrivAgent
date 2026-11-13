@@ -12,18 +12,26 @@ if-statement a non-ML-engineer can read and verify.
 class PolicyEngine:
     def __init__(self,
                  max_sensitive_reads_before_external=2,
-                 max_cross_agent_hops_before_external=3):
+                 max_cross_agent_hops_before_external=3,
+                 r1_counts_handoffs=True):
         self.max_sensitive_reads_before_external = max_sensitive_reads_before_external
         self.max_cross_agent_hops_before_external = max_cross_agent_hops_before_external
+        # v2 ablation (WP2): whether R1's count of prior sensitive actions
+        # includes scored handoff pseudo-actions (trajectory entries tagged
+        # kind="handoff"). v1 trajectories never contain them, so this has no
+        # effect outside handoff_mode="score". R3 always counts them.
+        self.r1_counts_handoffs = r1_counts_handoffs
+
+    def _r1_count(self, trajectory_prefix):
+        return sum(1 for a in trajectory_prefix if int(a["data_sensitivity"]) == 1
+                   and (self.r1_counts_handoffs or a.get("kind") != "handoff"))
 
     def evaluate(self, trajectory_prefix, candidate_action):
         """Returns (override_decision, reason) where override_decision is
         None if no hard rule fires, or one of "BLOCKED" / "HUMAN_APPROVAL"
         if a rule overrides the ML model's decision."""
 
-        sensitive_reads = sum(
-            1 for a in trajectory_prefix if int(a["data_sensitivity"]) == 1
-        )
+        sensitive_reads = self._r1_count(trajectory_prefix)
         cross_agent_hops = sum(
             1 for a in trajectory_prefix if a["destination_category"] == "cross_agent"
         )
@@ -71,9 +79,7 @@ class PolicyEngine:
         empty if no rule fires. The conditions and reasons are the same as
         in evaluate(); tests check that evaluate() always equals the first
         entry here."""
-        sensitive_reads = sum(
-            1 for a in trajectory_prefix if int(a["data_sensitivity"]) == 1
-        )
+        sensitive_reads = self._r1_count(trajectory_prefix)
         cross_agent_hops = sum(
             1 for a in trajectory_prefix if a["destination_category"] == "cross_agent"
         )

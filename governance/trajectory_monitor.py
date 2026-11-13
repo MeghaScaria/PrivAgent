@@ -52,7 +52,16 @@ from governance.audit_logger import get_audit_logger
 from governance.provenance import ProvenanceRegistry
 from governance.sensitivity import authoritative_label
 
-HANDOFF_MODES = ("shadow", "off")
+HANDOFF_MODES = ("shadow", "off", "score")
+# V2_PLAN.md WP2: handoffs scored as pseudo-actions under handoff_mode="score".
+# (sender, receiver) -> (agent_role, tool_name, action_type); destination is
+# always cross_agent and sensitivity comes from provenance. Encoded like the
+# generator's cross-agent template stages; see experiments/v2/HANDOFF_ENCODING.md.
+# orchestrator -> retriever is not scored: a plan carries no retrieved data.
+SCORED_HANDOFFS = {
+    ("retriever", "analyst"): ("retriever", "analyze", "write"),
+    ("analyst", "writer"): ("analyst", "analyze", "write"),
+}
 SENSITIVITY_MODES = ("shadow", "enforce")
 ALLOWED_DECISIONS = ("AUTONOMOUS", "RESTRICTED")
 GOVERNANCE_VERSIONS = ("v1", "v2")
@@ -134,7 +143,8 @@ class TrajectoryMonitor:
     def __init__(self, model_type="trajectory", run_id=None, task_type="multi_hop_research",
                  agent_count=3, policy_engine=None, audit_logger=None,
                  handoff_mode="shadow", sensitivity_mode="shadow",
-                 governance_version="v1", precedence=None, restricted_semantics=None):
+                 governance_version="v1", precedence=None, restricted_semantics=None,
+                 handoff_enforce=False, r1_counts_handoffs=None):
         if governance_version not in GOVERNANCE_VERSIONS:
             raise ValueError(f"governance_version must be one of {GOVERNANCE_VERSIONS}")
         precedence = precedence or DEFAULT_PRECEDENCE[governance_version]
@@ -152,9 +162,24 @@ class TrajectoryMonitor:
             raise ValueError(f"sensitivity_mode must be one of {SENSITIVITY_MODES}")
         if sensitivity_mode == "enforce" and handoff_mode == "off":
             raise ValueError("sensitivity_mode='enforce' needs provenance (handoff_mode='shadow')")
+        if handoff_mode == "score" and governance_version != "v2":
+            raise ValueError("handoff_mode='score' is a v2 mode (governance_version='v2')")
+        if handoff_enforce and handoff_mode != "score":
+            raise ValueError("handoff_enforce needs handoff_mode='score'")
+        if r1_counts_handoffs is not None and handoff_mode != "score":
+            raise ValueError("r1_counts_handoffs only applies with handoff_mode='score'")
+        self.handoff_enforce = bool(handoff_enforce)
+        # WP2 ablation: does R1 count sensitive handoff pseudo-actions? Default
+        # True under score (pseudo-actions are ordinary trajectory entries).
+        self.r1_counts_handoffs = (True if r1_counts_handoffs is None else bool(r1_counts_handoffs)) \
+            if handoff_mode == "score" else None
+        # Set when an enforced handoff decision stops the run (see record_handoff).
+        self.handoff_halt = None
         self.risk_engine = RiskEngine(model_type=model_type)
         self.controller = AutonomyController()
         self.policy_engine = policy_engine or PolicyEngine()
+        if self.r1_counts_handoffs is not None:
+            self.policy_engine.r1_counts_handoffs = self.r1_counts_handoffs
         self.audit_logger = audit_logger or get_audit_logger(governance_version)
         self.run_id = run_id or str(uuid.uuid4())[:8]
         self.task_type = task_type
@@ -217,7 +242,7 @@ class TrajectoryMonitor:
         return self.provenance.agent_label(agent_role)
 
     def evaluate(self, agent_role, tool_name, action_type, data_sensitivity,
-                 destination_category, check_sensitivity=False):
+                 destination_category, check_sensitivity=False, pseudo_action=None):
         """Evaluate a proposed action against the current trajectory.
         Returns a GovernanceDecision. Does NOT execute the tool; the
         caller (the tool wrapper) is responsible for actually invoking
@@ -286,10 +311,12 @@ class TrajectoryMonitor:
             task_type=self.task_type, event_id=event_id, seq=seq,
             sensitivity=sensitivity, flags=flags, shadow=shadow,
             combination=combination if export else None,
+            pseudo_action=pseudo_action,
         )
 
         if allowed:
-            self.trajectory.append(candidate_action)
+            self.trajectory.append({**candidate_action, **pseudo_action}
+                                   if pseudo_action else candidate_action)
 
         return decision
 
@@ -398,6 +425,10 @@ class TrajectoryMonitor:
             "mode": self.handoff_mode,
             "enforced": False,
         }
+        if (self.handoff_mode == "score" and event_type == "handoff"
+                and (sender, receiver) in SCORED_HANDOFFS):
+            event["score"] = self._score_handoff(event, sender, receiver, consumed, produced_ref)
+            event["enforced"] = self.handoff_enforce
         self.handoffs.append(event)
         mentioned = set(handed_over) | set(consumed) | set(origins)
         if produced_ref:
@@ -405,6 +436,43 @@ class TrajectoryMonitor:
         self.audit_logger.record_handoff(
             event, refs={r: reg.snapshot(r) for r in sorted(mentioned, key=_ref_order)})
         return event
+
+    def _score_handoff(self, event, sender, receiver, consumed, produced_ref):
+        """v2 (WP2): runs a data handoff through evaluate() as a pseudo-action
+        (see SCORED_HANDOFFS). Sensitivity is the provenance label of what the
+        receiver consumes, never an agent's declaration; unknown counts as 1.
+
+        The handoff has already happened when this runs (the tracker records
+        it after the sending node). So the pseudo-action is always appended to
+        the trajectory, tagged {"kind": "handoff", "event_id": ...}, except
+        when handoff_enforce stops the run: then it never reaches the
+        receiver. Under handoff_enforce, BLOCKED and HUMAN_APPROVAL both halt
+        (there is no approval workflow for internal handoffs in v2)."""
+        role, tool, action_type = SCORED_HANDOFFS[(sender, receiver)]
+        sensitivity = 1 if event["sensitivity"] in (1, None) else 0
+        tag = {"kind": "handoff", "event_id": event["event_id"]}
+        decision = self.evaluate(role, tool, action_type, sensitivity, "cross_agent",
+                                 pseudo_action=tag)
+        halts = self.handoff_enforce and decision.decision in ("BLOCKED", "HUMAN_APPROVAL")
+        if not decision.allowed and not halts:
+            # Not enforced: the data did move, so the trajectory records it.
+            self.trajectory.append({**decision.action, **tag, "executed_despite_decision": True})
+        if halts:
+            self.handoff_halt = {
+                "event_id": event["event_id"], "sender": sender, "receiver": receiver,
+                "decision": decision.decision, "source": decision.source,
+                "risk_score": round(decision.risk_score, 4),
+                "reason": (f"Handoff {sender} -> {receiver} {decision.decision} by governance "
+                           f"({decision.source}: {decision.reason}); "
+                           + ("HUMAN_APPROVAL is treated as BLOCKED for internal handoffs. "
+                              if decision.decision == "HUMAN_APPROVAL" else "")
+                           + f"Run halted before {receiver}."),
+            }
+        if self.restricted_semantics and decision.decision == "RESTRICTED":
+            self.mark_restricted_lineage([produced_ref] if produced_ref else consumed)
+        return {"pseudo_action": {**decision.action, **tag}, "decision": decision.decision,
+                "risk_score": round(decision.risk_score, 4), "source": decision.source,
+                "tool_event_id": decision.event_id, "halts_run": halts}
 
     def summary(self):
         total = len(self.decisions)

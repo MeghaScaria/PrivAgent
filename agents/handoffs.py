@@ -7,8 +7,12 @@ where that data originally came from.
 
 The tracker runs after each node returns, from the wrappers in
 agents/graph.py. It only reads the state, never changes it, so agents
-behave exactly as without it. Events are shadow-mode: logged, never
-scored or enforced.
+behave exactly as without it. By default (handoff_mode="shadow") events
+are logged, never scored or enforced. In v2's handoff_mode="score", the
+monitor also scores the retriever -> analyst and analyst -> writer
+handoffs as pseudo-actions, and with handoff_enforce a stopping decision
+halts the graph (see TrajectoryMonitor.record_handoff, agents/graph.py
+and experiments/v2/HANDOFF_ENCODING.md).
 
 What each handoff carries (and what the receiver reads):
   user -> orchestrator      the task

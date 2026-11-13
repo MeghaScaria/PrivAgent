@@ -8,6 +8,12 @@ Each node wrapper also tells a HandoffTracker (agents/handoffs.py) what
 the agent just handed to the next one. The tracker only reads state,
 and any error inside it is caught and recorded on the monitor, so
 instrumentation can never change or interrupt the agents' work.
+
+Exception (v2 only): with TrajectoryMonitor(handoff_mode="score",
+handoff_enforce=True), a BLOCKED or HUMAN_APPROVAL handoff, or a handoff
+that could not be scored, sets task_halted with a reason, and the edge to
+the next agent goes to END instead. Without handoff_enforce the graph is
+built exactly as before.
 """
 import logging
 from langgraph.graph import StateGraph, END
@@ -47,15 +53,51 @@ def build_graph(monitor, llm=None, approvals=None, checkpointer=None):
         observe(tracker.after_orchestrator, state)
         return state
 
+    enforce = getattr(monitor, "handoff_enforce", False)
+
+    def check_handoff(state, hook_name, errors_before):
+        """v2 handoff_enforce only: stop the run if the handoff just recorded
+        was BLOCKED / HUMAN_APPROVAL, or if recording it failed (fail closed:
+        an unscored handoff must not pass silently)."""
+        if not enforce or state.get("task_halted"):
+            return state
+        halt = monitor.handoff_halt
+        if halt is None and len(monitor.instrumentation_errors) > errors_before:
+            halt = {"decision": "BLOCKED", "source": "instrumentation_error",
+                    "reason": f"Handoff could not be scored ({hook_name} failed); "
+                              f"run halted (fail closed)."}
+            monitor.handoff_halt = halt
+        if halt is not None:
+            state["task_halted"] = True
+            state["halt_reason"] = halt["reason"]
+            state["governance_events"].append({
+                "step": len(state["governance_events"]) + 1,
+                "agent_role": halt.get("sender", "governance"),
+                "tool_name": "handoff", "decision": halt["decision"],
+                "risk_score": halt.get("risk_score"), "source": halt["source"],
+                "reason": halt["reason"], "blocked": True})
+        return state
+
     def retriever_node(state: AgentState) -> AgentState:
         state = run_retriever(state, monitor)
+        errors = len(monitor.instrumentation_errors)
         observe(tracker.after_retriever, state)
-        return state
+        return check_handoff(state, "after_retriever", errors)
 
     def analyst_node(state: AgentState) -> AgentState:
         state = run_analyst(state, llm=llm)
+        errors = len(monitor.instrumentation_errors)
         observe(tracker.after_analyst, state)
-        return state
+        return check_handoff(state, "after_analyst", errors)
+
+    def continue_unless_halted(next_node):
+        return lambda state: END if state.get("task_halted") else next_node
+
+    def link(source, target):
+        if enforce:
+            graph.add_conditional_edges(source, continue_unless_halted(target), [target, END])
+        else:
+            graph.add_edge(source, target)
 
     def writer_node(state: AgentState) -> AgentState:
         observe(tracker.before_writer)
@@ -70,11 +112,11 @@ def build_graph(monitor, llm=None, approvals=None, checkpointer=None):
 
     graph.set_entry_point("orchestrator")
     graph.add_edge("orchestrator", "retriever")
-    graph.add_edge("retriever", "analyst")
+    link("retriever", "analyst")
 
     if approvals is None:
         graph.add_node("writer", writer_node)
-        graph.add_edge("analyst", "writer")
+        link("analyst", "writer")
         graph.add_edge("writer", END)
         return graph.compile()
 
@@ -82,7 +124,10 @@ def build_graph(monitor, llm=None, approvals=None, checkpointer=None):
     previous = "analyst"
     for name, fn in nodes.items():
         graph.add_node(name, fn)
-        graph.add_edge(previous, name)
+        if previous == "analyst":
+            link(previous, name)
+        else:
+            graph.add_edge(previous, name)
         previous = name
     graph.add_edge(previous, END)
     app = graph.compile(checkpointer=checkpointer)
