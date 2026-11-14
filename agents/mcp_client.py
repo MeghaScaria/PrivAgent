@@ -18,7 +18,7 @@ import threading
 from contextlib import AsyncExitStack
 
 from mcp import ClientSession, StdioServerParameters
-from mcp.client.stdio import stdio_client
+from mcp.client.stdio import get_default_environment, stdio_client
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -61,6 +61,20 @@ def start_timeout():
     except ValueError:
         return DEFAULT_START_TIMEOUT
     return value if value > 0 else DEFAULT_START_TIMEOUT
+
+
+DATA_VERSION_ENV = "PRIVAGENT_DATA_VERSION"
+
+
+def _server_env():
+    """The stdio servers get a filtered environment from the MCP client, so
+    the synthetic data version (V2_PLAN.md WP4: "v2_canary") must be passed
+    through explicitly. Unset, nothing is added and the servers start
+    exactly as in v1."""
+    version = os.environ.get(DATA_VERSION_ENV)
+    if not version:
+        return {}
+    return {"env": {**get_default_environment(), DATA_VERSION_ENV: version}}
 
 
 def server_identity(tool_name):
@@ -115,7 +129,8 @@ class MCPClientManager:
     async def _connect_all(self):
         self._exit_stack = AsyncExitStack()
         for name, script_path in SERVERS.items():
-            params = StdioServerParameters(command=sys.executable, args=[script_path])
+            params = StdioServerParameters(command=sys.executable, args=[script_path],
+                                           **_server_env())
             read, write = await self._exit_stack.enter_async_context(stdio_client(params))
             session = await self._exit_stack.enter_async_context(ClientSession(read, write))
             await session.initialize()

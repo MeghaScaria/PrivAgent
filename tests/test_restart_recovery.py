@@ -45,7 +45,22 @@ class Gadget:
     def __post_init__(self):
         GADGETS_BUILT.append(1)
 
-TIMEOUT = 120
+# How long to wait for a worker event. A worker first starts its own MCP
+# servers, which may take up to PRIVAGENT_MCP_START_TIMEOUT (default 30 s),
+# so the wait is that plus a margin, and never below the original 120 s.
+# Unset: 30 + 90 = 120 s, as before.
+MCP_START_WAIT_MARGIN = 90
+
+
+def _worker_timeout():
+    try:
+        start = float(os.environ.get("PRIVAGENT_MCP_START_TIMEOUT", 30))
+    except ValueError:
+        start = 30
+    return max(120, (start if start > 0 else 30) + MCP_START_WAIT_MARGIN)
+
+
+TIMEOUT = _worker_timeout()
 
 
 class Worker:
