@@ -93,6 +93,52 @@ def test_no_v2_decision_less_severe_than_ml_live_monitor():
     assert downgrades_v1 > 0, "the sweep should include v1 downgrade cases"
 
 
+def test_reviewable_arm_relaxes_only_ml_only_external_blocks_exhaustive():
+    """max_severity_reviewable differs from max_severity in exactly one case:
+    external action, final BLOCKED, and no fired rule says BLOCKED. Then it is
+    HUMAN_APPROVAL. Never allowed, never relaxes a rule's BLOCKED."""
+    rule_options = [("R1", "BLOCKED"), ("R2", "HUMAN_APPROVAL"), ("R3", "BLOCKED")]
+    for ml in DECISIONS:
+        for n in range(len(rule_options) + 1):
+            for subset in itertools.combinations(rule_options, n):
+                fired = [{"rule_id": r, "decision": d, "reason": r} for r, d in subset]
+                for external in (False, True):
+                    strict, _, _ = combine_decisions(ml, fired, "max_severity", external=external)
+                    rev, _, by = combine_decisions(ml, fired, "max_severity_reviewable",
+                                                   external=external)
+                    relax = (external and strict == "BLOCKED"
+                             and not any(f["decision"] == "BLOCKED" for f in fired))
+                    if relax:
+                        assert rev == "HUMAN_APPROVAL" and by == "ml_model_made_reviewable"
+                    else:
+                        assert rev == strict, (ml, subset, external, rev, strict)
+                    assert rev not in ("AUTONOMOUS", "RESTRICTED") or ml in ("AUTONOMOUS", "RESTRICTED")
+                    if any(f["decision"] == "BLOCKED" for f in fired):
+                        assert rev == "BLOCKED"
+
+
+def test_reviewable_arm_on_live_monitor():
+    # demo_9e6a8ae2 pattern: ML BLOCKED (0.9952), only R2 (HUMAN_APPROVAL) fires
+    m, _ = _monitor("v2", precedence="max_severity_reviewable")
+    d = _demo_9e6a8ae2_pattern(m)
+    assert d.combination["ml_decision"] == "BLOCKED"
+    assert d.decision == "HUMAN_APPROVAL" and not d.allowed
+    assert d.combination["reviewable_relaxation"] is True
+    assert "made reviewable" in d.reason
+    # a rule's BLOCKED (R1: two prior sensitive reads) is not relaxed
+    m, _ = _monitor("v2", precedence="max_severity_reviewable")
+    m.evaluate("retriever", "search_documents", "read", 1, "internal")
+    m.evaluate("retriever", "query_database", "query", 1, "internal")
+    d = m.evaluate("writer", "send_result", "transmit", 1, "external")
+    assert d.decision == "BLOCKED" and "R1" in [r["rule_id"] for r in d.combination["rules_fired"]]
+    assert d.combination["reviewable_relaxation"] is False
+    # an ML-only BLOCKED on an internal action is not relaxed
+    m, _ = _monitor("v2", precedence="max_severity_reviewable")
+    m.risk_engine.compute_risk = lambda *a: 0.99
+    d = m.evaluate("analyst", "analyze", "write", 1, "cross_agent")
+    assert d.decision == "BLOCKED"
+
+
 def test_evaluate_equals_first_of_evaluate_all():
     pe = PolicyEngine()
     actions = [{"tool_name": t, "data_sensitivity": s, "destination_category": d}

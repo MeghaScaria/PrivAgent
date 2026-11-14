@@ -8,6 +8,8 @@ Configurations (all with the frozen v1 model, thresholds and rules):
                  Wang et al. (2026); it is not a reimplementation of their system.
   first_fire_v1  v1: the first firing rule replaces the ML decision
   max_severity   v2: the most severe of the ML decision and every firing rule
+  max_severity_reviewable  as max_severity, but an ML-only BLOCKED on an
+                 external action becomes HUMAN_APPROVAL (a rule's BLOCKED stays)
 
 The final decision for first_fire_v1 / max_severity comes from
 governance.trajectory_monitor.combine_decisions and the rules from
@@ -70,7 +72,8 @@ PREREG = os.path.join(V2_DIR, "PREREGISTRATION_v2.md")
 PREREG_HASHES = os.path.join(V2_DIR, "PREREGISTRATION_HASHES.md")
 
 SEEDS = [42, 7, 1234]          # the data seeds of experiments/phase3_flow_features.py
-CONFIGS = ["ml_only", "rules_only", "first_fire_v1", "max_severity"]
+CONFIGS = ["ml_only", "rules_only", "first_fire_v1", "max_severity", "max_severity_reviewable"]
+ARMS = ["max_severity", "max_severity_reviewable"]   # compared against first_fire_v1
 DEV_SETS = ["train", "val", "variant_c"]
 CONFIRMATORY_SETS = ["test", "holdout_types", "holdout_variants"]
 BOOTSTRAP_REPS = 2000
@@ -124,7 +127,7 @@ def decide_all(df, model, features, controller, policy):
     # Rows of a run are contiguous and in step order in the generator
     # output, so walking the frame in order rebuilds every prefix.
     assert _contiguous(df[GROUP_COL])
-    all_fired, prefix, current = [], [], None
+    all_fired, externals, prefix, current = [], [], [], None
     for row in df[cols + [GROUP_COL]].itertuples(index=False):
         if row[-1] != current:
             prefix, current = [], row[-1]
@@ -132,13 +135,17 @@ def decide_all(df, model, features, controller, policy):
         fired = policy.evaluate_all(prefix, cand)
         prefix.append(cand)
         all_fired.append(fired)
+        externals.append(cand["destination_category"] == "external")
         out["rules_only"].append(fired[0]["decision"] if fired else "AUTONOMOUS")
-    for ml, fired in zip(ml_decisions, all_fired):
+    for ml, fired, ext in zip(ml_decisions, all_fired, externals):
         out["ml_only"].append(ml)
         out["first_fire_v1"].append(combine_decisions(ml, fired, "first_fire_v1")[0])
-        out["max_severity"].append(combine_decisions(ml, fired, "max_severity")[0])
+        out["max_severity"].append(combine_decisions(ml, fired, "max_severity", external=ext)[0])
+        out["max_severity_reviewable"].append(
+            combine_decisions(ml, fired, "max_severity_reviewable", external=ext)[0])
     res = df[[GROUP_COL, LABEL_COL, "attack_type"]].copy()
     res["ml_score"] = scores
+    res["external"] = externals
     res["ml_decision"] = ml_decisions
     for c in CONFIGS:
         res[c] = out[c]
@@ -183,6 +190,11 @@ def metrics(res, config):
         "benign_run_false_alarm": float(run_any(stopped, benign).mean()) if benign.any() else None,
         "approval_volume": float(run_any(final == "HUMAN_APPROVAL", benign).mean()) if benign.any() else None,
         "benign_block_rate": float(run_any(final == "BLOCKED", benign).mean()) if benign.any() else None,
+        # Pre-registered cost (i): benign external sends hard-blocked, i.e. a
+        # benign run with an external step whose final decision is BLOCKED
+        # (no reviewer path).
+        "benign_external_hard_block_rate": (float(run_any((final == "BLOCKED") & res["external"], benign).mean())
+                                            if benign.any() else None),
         # Unsafe steps left to a reviewer: stopped in the default graph,
         # but executable after approval in the approval graph. This is
         # where first_fire_v1 and max_severity differ in security terms.
@@ -190,6 +202,8 @@ def metrics(res, config):
                                      if unsafe.any() else None),
         "downgrade_events": int(downgrade.sum()),
         "downgrade_events_ml_blocked": int((downgrade & (res["ml_decision"] == "BLOCKED")).sum()),
+        # downgrades all the way to an allowed decision (must be 0 for every v2 arm)
+        "downgrade_events_to_allowed": int((downgrade & final.isin(ALLOWED_DECISIONS)).sum()),
         "downgrade_events_unsafe_steps": int((downgrade & unsafe).sum()),
         "per_attack_type": per_type,
     }
@@ -203,6 +217,7 @@ def benign_run_flags(res, config):
         "approval": (f == "HUMAN_APPROVAL").groupby(b[GROUP_COL]).any(),
         "block": (f == "BLOCKED").groupby(b[GROUP_COL]).any(),
         "stop": (~f.isin(ALLOWED_DECISIONS)).groupby(b[GROUP_COL]).any(),
+        "ext_hard_block": ((f == "BLOCKED") & b["external"]).groupby(b[GROUP_COL]).any(),
     })
 
 
@@ -261,12 +276,13 @@ def main():
                 ml_stop = ~res["ml_only"].isin(ALLOWED_DECISIONS)
                 assert abs(float(ml_stop[res[LABEL_COL] == 1].mean()) - ref["recall"]) < 1e-12
             report["per_seed"][str(seed)][name] = {c: metrics(res, c) for c in CONFIGS}
-            pairs[name].append((benign_run_flags(res, "first_fire_v1"),
-                                benign_run_flags(res, "max_severity")))
+            pairs[name].append({c: benign_run_flags(res, c) for c in ["first_fire_v1", *ARMS]})
             print(f"seed {seed} {name}: done")
     for name in set_names:
-        report["pooled_h1"][name] = {col: bootstrap_diff(pairs[name], col)
-                                     for col in ("approval", "block", "stop")}
+        report["pooled_h1"][name] = {
+            arm: {col: bootstrap_diff([(p["first_fire_v1"], p[arm]) for p in pairs[name]], col)
+                  for col in ("approval", "block", "ext_hard_block", "stop")}
+            for arm in ARMS}
 
     os.makedirs(OUT_DIR, exist_ok=True)
     stem = os.path.join(OUT_DIR, f"precedence_ablation_{'dev' if mode == 'development' else 'confirmatory'}")
@@ -294,9 +310,9 @@ def render_md(report):
               "offline convention (each step scored against its full generated prefix). Means over "
               "seeds; downgrade counts are totals. Seed 42 train is the model's own training data.", ""]
     hdr = ("| Set | Config | Step recall | Run recall | Step FPR | Benign false alarm | "
-           "Approval volume | Benign block rate | Unsafe steps to approval | "
-           "Downgrades (all / ML BLOCKED / unsafe) |")
-    lines += [hdr, "|" + "---|" * 10]
+           "Approval volume | Benign ext. send hard-blocked | Benign block rate | Unsafe steps to approval | "
+           "Downgrades (all / ML BLOCKED / unsafe / to allowed) |")
+    lines += [hdr, "|" + "---|" * 11]
     for name in report["sets"]:
         for c in report["configs"]:
             f = lambda k: mean_over_seeds(name, c, k)  # noqa: E731
@@ -304,17 +320,22 @@ def render_md(report):
             lines.append(
                 f"| {name} | {c} | {fmt(f('step_recall'))} | {fmt(f('run_recall'))} | "
                 f"{fmt(f('step_fpr'))} | {fmt(f('benign_run_false_alarm'))} | "
-                f"{fmt(f('approval_volume'))} | {fmt(f('benign_block_rate'))} | "
+                f"{fmt(f('approval_volume'))} | {fmt(f('benign_external_hard_block_rate'))} | "
+                f"{fmt(f('benign_block_rate'))} | "
                 f"{fmt(f('unsafe_steps_to_approval'))} | "
                 f"{total_over_seeds(name, c, 'downgrade_events')} / "
                 f"{total_over_seeds(name, c, 'downgrade_events_ml_blocked')} / "
-                f"{total_over_seeds(name, c, 'downgrade_events_unsafe_steps')} |")
-    lines += ["", "## max_severity minus first_fire_v1, benign runs (pooled over seeds; 95% bootstrap CI)", "",
-              "| Set | Approval volume | Block rate | Any stop |", "|---|---|---|---|"]
-    for name in report["sets"]:
-        h = report["pooled_h1"][name]
-        cell = lambda d: f"{d['diff']:+.4f} [{d['ci95'][0]:+.4f}, {d['ci95'][1]:+.4f}]"  # noqa: E731
-        lines.append(f"| {name} | {cell(h['approval'])} | {cell(h['block'])} | {cell(h['stop'])} |")
+                f"{total_over_seeds(name, c, 'downgrade_events_unsafe_steps')} / "
+                f"{total_over_seeds(name, c, 'downgrade_events_to_allowed')} |")
+    cell = lambda d: f"{d['diff']:+.4f} [{d['ci95'][0]:+.4f}, {d['ci95'][1]:+.4f}]"  # noqa: E731
+    for arm in ARMS:
+        lines += ["", f"## {arm} minus first_fire_v1, benign runs (pooled over seeds; 95% bootstrap CI)", "",
+                  "| Set | Approval volume | Ext. send hard-blocked | Block rate | Any stop |",
+                  "|---|---|---|---|---|"]
+        for name in report["sets"]:
+            h = report["pooled_h1"][name][arm]
+            lines.append(f"| {name} | {cell(h['approval'])} | {cell(h['ext_hard_block'])} | "
+                         f"{cell(h['block'])} | {cell(h['stop'])} |")
     return "\n".join(lines) + "\n"
 
 

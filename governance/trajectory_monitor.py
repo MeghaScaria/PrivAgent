@@ -65,25 +65,39 @@ SCORED_HANDOFFS = {
 SENSITIVITY_MODES = ("shadow", "enforce")
 ALLOWED_DECISIONS = ("AUTONOMOUS", "RESTRICTED")
 GOVERNANCE_VERSIONS = ("v1", "v2")
-PRECEDENCES = ("first_fire_v1", "max_severity")
+PRECEDENCES = ("first_fire_v1", "max_severity", "max_severity_reviewable")
 DEFAULT_PRECEDENCE = {"v1": "first_fire_v1", "v2": "max_severity"}
 SEVERITY = {"AUTONOMOUS": 0, "RESTRICTED": 1, "HUMAN_APPROVAL": 2, "BLOCKED": 3}
+REVIEWABLE_DECIDED_BY = "ml_model_made_reviewable"
 
 
-def combine_decisions(ml_decision, fired, precedence):
+def combine_decisions(ml_decision, fired, precedence, external=False):
     """The final decision from the ML decision and the rules that fired
     (fired: PolicyEngine.evaluate_all output, in rule order).
 
     first_fire_v1: the first firing rule replaces the ML decision.
     max_severity: the most severe of the ML decision and all fired rules.
+    max_severity_reviewable: as max_severity, except that on an external
+      action a BLOCKED that comes from the ML model alone (no fired rule
+      says BLOCKED) becomes HUMAN_APPROVAL, so a reviewer can still see
+      it. A rule's BLOCKED is never relaxed, and nothing becomes allowed.
 
     Returns (final_decision, rule_index or None, decided_by). rule_index
     points into fired at the rule whose decision (and reason) is final;
-    None means the ML decision stands."""
+    None means the ML decision stands (or, for the reviewable relaxation,
+    decided_by is REVIEWABLE_DECIDED_BY)."""
     if precedence == "first_fire_v1":
         if fired:
             return fired[0]["decision"], 0, "policy_engine"
         return ml_decision, None, "ml_model"
+    final, idx, decided_by = _max_severity(ml_decision, fired)
+    if (precedence == "max_severity_reviewable" and external and final == "BLOCKED"
+            and not any(f["decision"] == "BLOCKED" for f in fired)):
+        return "HUMAN_APPROVAL", None, REVIEWABLE_DECIDED_BY
+    return final, idx, decided_by
+
+
+def _max_severity(ml_decision, fired):
     if not fired:
         return ml_decision, None, "ml_model"
     top = max(range(len(fired)), key=lambda i: (SEVERITY[fired[i]["decision"]], -i))
@@ -217,9 +231,14 @@ class TrajectoryMonitor:
             rule_decision = fired[0]["decision"] if fired else None
             decided_by = source
         else:
-            final, idx, decided_by = combine_decisions(ml_decision, fired, self.precedence)
+            final, idx, decided_by = combine_decisions(
+                ml_decision, fired, self.precedence,
+                external=candidate_action["destination_category"] == "external")
             source = "policy_engine" if idx is not None else "ml_model"
             reason = fired[idx]["reason"] if idx is not None else ml_reason
+            if decided_by == REVIEWABLE_DECIDED_BY:
+                reason = (f"{ml_reason}; ML-only BLOCKED on an external action made reviewable "
+                          f"(max_severity_reviewable): HUMAN_APPROVAL")
             rule_decision = (max((f["decision"] for f in fired), key=SEVERITY.get)
                              if fired else None)
         record = {
@@ -233,6 +252,7 @@ class TrajectoryMonitor:
             "v1_decision": v1[0],
             "would_differ_under_v1": final != v1[0],
             "downgraded_ml": SEVERITY[final] < SEVERITY[ml_decision],
+            "reviewable_relaxation": decided_by == REVIEWABLE_DECIDED_BY,
         }
         return risk_score, final, source, reason, record
 
