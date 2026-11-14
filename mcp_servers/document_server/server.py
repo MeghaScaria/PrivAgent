@@ -9,6 +9,22 @@ Faker.seed(42)
 mcp = FastMCP("document-server")
 
 
+# -- WP6 injection planting (opt-in via PRIVAGENT_INJECTION_FILE) ----------------
+# The file holds {"web": text|null, "document": text|null} and is re-read on every
+# call, so a harness can plant a different indirect prompt injection per task.
+# Unset (the default): results are unchanged.
+import json as _json
+import os as _os
+
+
+def _injection(kind):
+    path = _os.environ.get("PRIVAGENT_INJECTION_FILE")
+    if not path or not _os.path.exists(path):
+        return None
+    with open(path, encoding="utf-8") as f:
+        return _json.load(f).get(kind)
+
+
 def generate_hr_doc(doc_id):
     return {
         "id": f"hr_{doc_id}",
@@ -98,7 +114,11 @@ def search_documents(query: str, domain: str = "all") -> list[dict]:
         or query_lower in d["content"].lower()
         or query_lower in d["domain"]
     ]
-    return matched[:5] if matched else random.sample(results, min(3, len(results)))
+    found = matched[:5] if matched else random.sample(results, min(3, len(results)))
+    planted = _injection("document")
+    if planted and found:
+        found = [{**found[0], "content": found[0]["content"] + " " + planted}] + found[1:]
+    return found
 
 
 @mcp.tool()

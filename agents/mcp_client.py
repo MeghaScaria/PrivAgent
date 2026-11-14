@@ -64,6 +64,7 @@ def start_timeout():
 
 
 DATA_VERSION_ENV = "PRIVAGENT_DATA_VERSION"
+INJECTION_FILE_ENV = "PRIVAGENT_INJECTION_FILE"   # WP6: planted prompt injections
 
 
 def _server_env():
@@ -71,10 +72,10 @@ def _server_env():
     the synthetic data version (V2_PLAN.md WP4: "v2_canary") must be passed
     through explicitly. Unset, nothing is added and the servers start
     exactly as in v1."""
-    version = os.environ.get(DATA_VERSION_ENV)
-    if not version:
+    passed = {k: os.environ[k] for k in (DATA_VERSION_ENV, INJECTION_FILE_ENV) if os.environ.get(k)}
+    if not passed:
         return {}
-    return {"env": {**get_default_environment(), DATA_VERSION_ENV: version}}
+    return {"env": {**get_default_environment(), **passed}}
 
 
 def server_identity(tool_name):
