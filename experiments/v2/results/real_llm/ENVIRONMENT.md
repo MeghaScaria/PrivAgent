@@ -33,6 +33,27 @@ otherwise → `qwen2.5:3b`. There is no dedicated VRAM here, so the model is **`
 | `qwen2.5:3b` | `357c53fb659c5076de1d65ccb0b397446227b71a42be9d1603d46168015c9e4b` | 1,929,912,432 B | 3.1B, Q4_K_M | 15 Nov 2026 03:51 (CLI pull; Ollama verified the digest) |
 | `gemma3:270m` | `e7d36fb2c3b3293cfe56d55889867a064b3a2b22e98335f2e6e8a387e081d6be` | 291,554,930 B | 268M, Q8_0 | present before this work; used for the first smoke test only (too small; see that run's report) |
 
+## Gemini (LLM_BACKEND=gemini)
+
+- **Model:** `agents/llm.py` uses `GEMINI_MODEL` and falls back to `gemini-2.0-flash` if it
+  is unset. `.env` sets `GEMINI_MODEL=gemini-3.6-flash`.
+  - The dashboard loads `.env`.
+  - Since 15 Nov 2026, `real_llm_pilot.py` loads it too, with the shell environment winning.
+  - The pilot therefore runs **`gemini-3.6-flash`**, with API version string
+    `3.6-flash-07-2026` (`GET /v1beta/models/gemini-3.6-flash`, 15 Nov 2026).
+- **Client:** `langchain_google_genai` 4.4.2, `ChatGoogleGenerativeAI`, `max_retries=6`
+  (default).
+- **Temperature:** ignored. The client warns that `gemini-3.6-flash` "uses fixed sampling
+  defaults", so the 0.2 setting has no effect.
+- **Quota:**
+  - The models API does not expose rate limits. They appeared in the first dev check's 429 errors.
+  - The key is on the **free tier**: quota
+    `GenerateRequestsPerDayPerProjectPerModel-FreeTier`, **20 `generateContent` requests per day**
+    for `gemini-3.6-flash`.
+  - The check that hit the limit is
+    `smoke_gemini_gemini-3.6-flash_ts2-A_strong_20261115T123423`: 20 requests succeeded, then
+    every request returned 429 RESOURCE_EXHAUSTED, with "retry in 50m".
+
 ## Client settings (agents/llm.py, LLM_BACKEND=ollama)
 
 | Setting | Value |
