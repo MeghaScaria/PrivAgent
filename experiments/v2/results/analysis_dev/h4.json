@@ -1,0 +1,76 @@
+{
+  "hypothesis": "H4",
+  "files": [
+    "smoke_ollama_qwen2.5-3b_ts2-B_20261115T153639.jsonl"
+  ],
+  "config": "v2",
+  "steps_labelled": 24,
+  "steps_without_content": 0,
+  "unsafe_steps": 6,
+  "attack_tasks": 3,
+  "a": {
+    "recall_counts": {
+      "path": {
+        "k": 0,
+        "n": 3,
+        "rate": 0.0,
+        "wilson95": [
+          5.551115123125783e-17,
+          0.5614970317550454
+        ]
+      },
+      "direct": {
+        "k": 3,
+        "n": 3,
+        "rate": 1.0,
+        "wilson95": [
+          0.4385029682449546,
+          1.0
+        ]
+      }
+    },
+    "bootstrap": {
+      "recall_path": {
+        "point": 0.0,
+        "ci95": [
+          0.0,
+          0.0
+        ],
+        "nan_replicates": 0
+      },
+      "recall_direct": {
+        "point": 1.0,
+        "ci95": [
+          1.0,
+          1.0
+        ],
+        "nan_replicates": 0
+      },
+      "diff_path_minus_direct": {
+        "point": -1.0,
+        "ci95": [
+          -1.0,
+          -1.0
+        ],
+        "nan_replicates": 0
+      }
+    },
+    "supported": true
+  },
+  "b": {
+    "auroc": 0.5555555555555556,
+    "ci95": [
+      0.33162385900090896,
+      0.7794872521102022
+    ],
+    "se": 0.11425296501414889,
+    "positives": 6,
+    "negatives": 18,
+    "supported": true,
+    "ci_upper_at_most_0_6": false
+  },
+  "supported": {
+    "a": true,
+    "b": true
+  }
+}
