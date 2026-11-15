@@ -37,6 +37,12 @@ split and held-out sets are generated (the generator draws them in one
 stream) but discarded unread, exactly as experiments/phase3_flow_features.py
 does. --confirmatory is refused unless experiments/v2/PREREGISTRATION_HASHES.md
 records the current SHA-256 of experiments/v2/PREREGISTRATION_v2.md.
+
+CONFIRMATORY MODE: the pre-registered seeds {42, 1-9} and the confirmatory
+sets only (test, held-out types, variant B), written under
+experiments/v2/results/confirmatory/. Both modes also write *_runs.json:
+benign-run flags and step counts per (seed, set, configuration), which the
+H1 analysis script (experiments/v2/analysis/h1.py) reads.
 Note: for seed 42 the train split is the frozen model's own training data
 (in-sample); seeds 7 and 1234 are fresh draws from the same generator.
 
@@ -71,7 +77,9 @@ MODELS_DIR = os.path.join(ROOT, "models")
 PREREG = os.path.join(V2_DIR, "PREREGISTRATION_v2.md")
 PREREG_HASHES = os.path.join(V2_DIR, "PREREGISTRATION_HASHES.md")
 
-SEEDS = [42, 7, 1234]          # the data seeds of experiments/phase3_flow_features.py
+SEEDS = [42, 7, 1234]          # the data seeds of experiments/phase3_flow_features.py (development)
+CONFIRMATORY_SEEDS = [42, 1, 2, 3, 4, 5, 6, 7, 8, 9]   # PREREGISTRATION_v2.md §1
+CONFIRMATORY_DIR = os.path.join(OUT_DIR, "confirmatory")
 CONFIGS = ["ml_only", "rules_only", "first_fire_v1", "max_severity", "max_severity_reviewable"]
 ARMS = ["max_severity", "max_severity_reviewable"]   # compared against first_fire_v1
 DEV_SETS = ["train", "val", "variant_c"]
@@ -221,6 +229,29 @@ def benign_run_flags(res, config):
     })
 
 
+def run_records(res):
+    """What the H1 analysis (experiments/v2/analysis/h1.py) needs, per
+    configuration: benign-run flags in run-id order, and step counts."""
+    out = {}
+    unsafe = res[LABEL_COL] == 1
+    for c in CONFIGS:
+        flags = benign_run_flags(res, c).sort_index()
+        final = res[c]
+        downgrade = final.map(SEVERITY) < res["ml_decision"].map(SEVERITY)
+        out[c] = {
+            "benign_run_ids": [str(i) for i in flags.index],
+            **{col: flags[col].astype(int).tolist() for col in ("approval", "block", "stop", "ext_hard_block")},
+            "unsafe_steps": int(unsafe.sum()),
+            "unsafe_steps_to_approval": int((final[unsafe] == "HUMAN_APPROVAL").sum()),
+            "downgrade_events": int(downgrade.sum()),
+            "downgrade_events_ml_blocked_to_approval_external": int(
+                (downgrade & (res["ml_decision"] == "BLOCKED") & (final == "HUMAN_APPROVAL")
+                 & res["external"]).sum()),
+            "downgrade_events_to_allowed": int((downgrade & final.isin(ALLOWED_DECISIONS)).sum()),
+        }
+    return out
+
+
 def bootstrap_diff(per_seed_pairs, column, reps=BOOTSTRAP_REPS, seed=0):
     """per_seed_pairs: [(flags_v1, flags_v2)] per seed, aligned by run id.
     Pooled mean difference (v2 - v1) and a 95% percentile CI, resampling
@@ -255,18 +286,22 @@ def main():
         sys.exit("Refused: experiments/v2/PREREGISTRATION_HASHES.md does not record the current "
                  "SHA-256 of PREREGISTRATION_v2.md. Freeze the pre-registration first.")
     mode = "confirmatory" if args.confirmatory else "development"
-    set_names = DEV_SETS + (CONFIRMATORY_SETS if args.confirmatory else [])
+    # Confirmatory: the pre-registered seeds and the confirmatory sets only.
+    set_names = CONFIRMATORY_SETS if args.confirmatory else DEV_SETS
+    seeds = CONFIRMATORY_SEEDS if args.confirmatory else SEEDS
 
     model, features, thresholds = load_frozen()
     controller = AutonomyController(thresholds=thresholds)
     policy = PolicyEngine()
 
-    report = {"mode": mode, "seeds": SEEDS, "sets": set_names, "configs": CONFIGS,
+    report = {"mode": mode, "seeds": seeds, "sets": set_names, "configs": CONFIGS,
               "thresholds": thresholds, "per_seed": {}, "pooled_h1": {}}
+    runs = {"mode": mode, "seeds": seeds, "sets": set_names, "configs": CONFIGS, "per_seed": {}}
     pairs = {s: [] for s in set_names}
-    for seed in SEEDS:
+    for seed in seeds:
         sets = build_sets(seed, args.confirmatory)
         report["per_seed"][str(seed)] = {}
+        runs["per_seed"][str(seed)] = {}
         for name in set_names:
             df = sets[name].reset_index(drop=True)
             res = decide_all(df, model, features, controller, policy)
@@ -276,6 +311,7 @@ def main():
                 ml_stop = ~res["ml_only"].isin(ALLOWED_DECISIONS)
                 assert abs(float(ml_stop[res[LABEL_COL] == 1].mean()) - ref["recall"]) < 1e-12
             report["per_seed"][str(seed)][name] = {c: metrics(res, c) for c in CONFIGS}
+            runs["per_seed"][str(seed)][name] = run_records(res)
             pairs[name].append({c: benign_run_flags(res, c) for c in ["first_fire_v1", *ARMS]})
             print(f"seed {seed} {name}: done")
     for name in set_names:
@@ -284,10 +320,13 @@ def main():
                   for col in ("approval", "block", "ext_hard_block", "stop")}
             for arm in ARMS}
 
-    os.makedirs(OUT_DIR, exist_ok=True)
-    stem = os.path.join(OUT_DIR, f"precedence_ablation_{'dev' if mode == 'development' else 'confirmatory'}")
+    out_dir = CONFIRMATORY_DIR if args.confirmatory else OUT_DIR
+    os.makedirs(out_dir, exist_ok=True)
+    stem = os.path.join(out_dir, f"precedence_ablation_{'dev' if mode == 'development' else 'confirmatory'}")
     with open(stem + ".json", "w", encoding="utf-8") as f:
         json.dump(report, f, indent=2)
+    with open(stem + "_runs.json", "w", encoding="utf-8") as f:
+        json.dump(runs, f)
     with open(stem + ".md", "w", encoding="utf-8") as f:
         f.write(render_md(report))
     print("wrote", stem + ".json", "and .md")
