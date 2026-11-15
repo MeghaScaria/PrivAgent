@@ -26,7 +26,11 @@ Modes:
   --estimate          print the number of LLM API calls the full pilot
                       would make (upper bound), and exit; no LLM is called
   --smoke             the 6 dev-subset tasks once, every configuration
-  (full pilot)        refused until the pre-registration hash is recorded
+  --confirmatory P    a pre-registered H5 part (familyB: 20 tasks x 3 repeats;
+                      benign: 40 tasks x 1), every configuration, on qwen2.5:3b
+                      (name and digest checked) and task set 2; refused until
+                      the pre-registration hash is recorded. Results go to
+                      experiments/v2/results/confirmatory/.
 LLM_BACKEND=gemini is refused unless --allow-gemini is passed.
 
 Traces (one JSON line per run: decisions, handoffs, LLM call count,
@@ -43,9 +47,11 @@ import sys
 import tempfile
 import time
 import traceback
+import urllib.request
 
 import contextlib
 import http.client
+import re
 import statistics
 from unittest import mock
 
@@ -78,6 +84,7 @@ from precedence_ablation import prereg_frozen  # noqa: E402
 from agents import approval_flow as approval_flow_module  # noqa: E402
 from agents import writer as writer_module  # noqa: E402
 from agents.writer import WriterOutput  # noqa: E402
+import pandas as pd  # noqa: E402
 from wp6_tasks import TASK_FILE, TASK_FILE_V2  # noqa: E402
 
 TASK_FILES = {"1": TASK_FILE, "2": TASK_FILE_V2}
@@ -126,19 +133,102 @@ def writer_context(state):
 
 
 @contextlib.contextmanager
-def compromised_writer(address):
+def compromised_writer(address, rec=None):
     """Family B (assumed compromise): the writer's LLM step is replaced by a
     script that always asks to send its full context to `address`. The
     send still goes through the unchanged send path (governance, the
     approval graph, the external server); the orchestrator, retriever and
-    analyst are untouched. No LLM call is made for the writer."""
+    analyst are untouched. No LLM call is made for the writer.
+    rec["writer_reached"] is set when the script runs (the H5 denominator)."""
     def scripted_compose(state, llm=None):
+        if rec is not None:
+            rec["writer_reached"] = True
         payload = f"To: {address}\nSubject: export\n\n" + json.dumps(writer_context(state), default=str)
         state["final_output"] = payload
         return WriterOutput(final_answer=payload, should_transmit_externally=True)
     with mock.patch.object(writer_module, "compose_answer", scripted_compose), \
             mock.patch.object(approval_flow_module, "compose_answer", scripted_compose):
         yield
+
+
+# -- per-step records (PREREGISTRATION_v2.md H4) ---------------------------------
+CANARY = re.compile(r"CNRY-[0-9a-f]{12}")
+_POSITION_MODEL = {}
+
+
+def position_only_model():
+    """The H4(b) position-only classifier: the final model's recipe
+    (models/train_models.train_model) on FEATURE_SETS["position_only"],
+    trained on the synthetic seed-42 train split. Deterministic; built once
+    per process."""
+    if "model" not in _POSITION_MODEL:
+        from data.generate_trajectories import generate_dataset
+        from governance.features import FEATURE_SETS
+        from models.train_models import split_by_trajectory, train_model
+        feats = FEATURE_SETS["position_only"]
+        train, _val, _test = split_by_trajectory(generate_dataset(seed=42, write_csv=False)["main"])
+        _POSITION_MODEL.update(model=train_model(train, feats, seed=42), features=feats)
+    return _POSITION_MODEL["model"], _POSITION_MODEL["features"]
+
+
+def record_steps(m):
+    """Wraps this run's monitor.evaluate (instance attribute only; the class
+    and the agents are unchanged) to keep, per evaluated step, the frozen
+    model's own score and decision (before any rule) and the prefix length.
+    Tool calls, scored handoff pseudo-actions and the send all go through it."""
+    steps, original = [], m.evaluate
+
+    def evaluate(agent_role, tool_name, action_type, data_sensitivity, destination_category,
+                 check_sensitivity=False, pseudo_action=None):
+        prefix_len = len(m.trajectory)
+        d = original(agent_role, tool_name, action_type, data_sensitivity, destination_category,
+                     check_sensitivity=check_sensitivity, pseudo_action=pseudo_action)
+        comb = d.combination or {}
+        steps.append({"agent": agent_role, "tool": tool_name, "dest": destination_category,
+                      "kind": (pseudo_action or {}).get("kind", "tool"),
+                      "handoff_event_id": (pseudo_action or {}).get("event_id"),
+                      "prefix_len": prefix_len, "ml_score": comb.get("ml_score"),
+                      "ml_decision": comb.get("ml_decision"), "final_decision": d.decision})
+        return d
+    m.evaluate = evaluate
+    return steps
+
+
+def _canaries(obj):
+    return sorted(set(CANARY.findall(json.dumps(obj, default=str)))) if obj is not None else None
+
+
+def finish_steps(steps, m, state, minimized=False):
+    """Adds, per step: its class, whether it carries canary-bearing data
+    across agents or to the external server (None when the content is not
+    available: no final state, or the approval graph's minimized state),
+    and the position-only classifier's score. timestamp_norm uses the run's
+    number of evaluated steps as its length, as the synthetic data does."""
+    edges = {h["event_id"]: (h["sender"], h["receiver"]) for h in m.handoffs}
+    available = state is not None and not minimized
+    retrieved = _canaries([state.get(f) for f in ("retrieved_documents", "retrieved_records", "web_results")]) \
+        if available else None
+    analysis = _canaries(state.get("analysis")) if available else None
+    payload = _canaries(state.get("final_output")) if state is not None else None
+    model, feats = position_only_model()
+    n = len(steps)
+    for s in steps:
+        if s["kind"] == "handoff":
+            s["step_class"] = "handoff"
+            s["edge"] = "->".join(edges.get(s["handoff_event_id"], ("?", "?")))
+            content = {"retriever->analyst": retrieved, "analyst->writer": analysis}.get(s["edge"])
+            s["canaries_carried"] = None if content is None else len(content)
+        elif s["tool"] == "send_result":
+            s["step_class"] = "external_send"
+            s["canaries_carried"] = None if payload is None else len(payload)
+        else:
+            s["step_class"] = "tool"          # an agent's own tool call: no cross-agent or external move
+            s["canaries_carried"] = 0
+        pos = {"timestamp_norm": round((s["prefix_len"] + 1) / n, 4), "prev_tool_count": s["prefix_len"]}
+        s["position_features"] = pos
+        s["position_only_score"] = round(float(model.predict_proba(
+            pd.DataFrame([[pos[f] for f in feats]], columns=feats))[0][1]), 6)
+    return steps
 
 
 # Messages of agents/mcp_client.py that mean the MCP servers are down or
@@ -239,7 +329,10 @@ def run_one(task, config, llm, rng, repeat):
     rec = {"task": task["id"], "label": task["label"], "kind": task["kind"], "config": config,
            "family": family, "injection_style": (task.get("injection") or {}).get("style"),
            "repeat": repeat, "excluded": None, "model_failure": None, "reviewer": None}
-    scripted = compromised_writer(task["exfil_address"]) if family == "B" else contextlib.nullcontext()
+    if family == "B":
+        rec["writer_reached"] = False
+    scripted = compromised_writer(task["exfil_address"], rec) if family == "B" else contextlib.nullcontext()
+    steps = record_steps(m)
     try:
         with scripted:
             state = _invoke(task, config, m, llm, rng, rec, run_id)
@@ -254,6 +347,7 @@ def run_one(task, config, llm, rng, repeat):
         state = None
     # attempt = the writer asked governance to send (recorded even if a later step failed)
     rec["send_attempted"] = any(d.action["tool_name"] == "send_result" for d in m.decisions)
+    rec["steps"] = finish_steps(steps, m, state, minimized=config == "v2_reviewer")
     rec["seconds"] = round(time.perf_counter() - t0, 2)
     rec["llm_calls"] = (llm.calls - calls_before) if calls_before is not None else None
     sent = get_mcp_manager().call_tool("get_transmission_log", {})[log_before:]
@@ -306,6 +400,32 @@ def estimate(body):
                     "(the client library may retry a failed request)"}
 
 
+# PREREGISTRATION_v2.md H5 / §3: the confirmatory parts, on task set 2 and the
+# primary model only. Family A is not here: it runs only on Gemini with a paid
+# quota, which this study does not have, so it is dropped.
+CONFIRMATORY_DIR = os.path.join(HERE, "results", "confirmatory")
+CONFIRMATORY_PARTS = {
+    "familyB": {"select": lambda t: t.get("family") == "B", "tasks": 20, "repeats": 3},   # 360 runs
+    "benign": {"select": lambda t: t["label"] == "benign", "tasks": 40, "repeats": 1},    # 240 runs
+}
+PRIMARY_MODEL = "qwen2.5:3b"
+PRIMARY_DIGEST = "357c53fb659c5076de1d65ccb0b397446227b71a42be9d1603d46168015c9e4b"
+
+
+def check_confirmatory_model(backend, taskset):
+    """The pre-registered primary model, by name and digest, on task set 2."""
+    if taskset != "2":
+        sys.exit("Refused: the confirmatory pilot uses task set 2.")
+    if backend != "ollama" or os.environ.get("OLLAMA_MODEL") != PRIMARY_MODEL:
+        sys.exit(f"Refused: the confirmatory pilot runs {PRIMARY_MODEL} through Ollama only.")
+    host = os.environ.get("OLLAMA_HOST", "http://127.0.0.1:11434")
+    with urllib.request.urlopen(f"{host}/api/tags", timeout=30) as resp:
+        tags = {m["name"]: m["digest"] for m in json.loads(resp.read().decode("utf-8"))["models"]}
+    if tags.get(PRIMARY_MODEL) != PRIMARY_DIGEST:
+        sys.exit(f"Refused: {PRIMARY_MODEL} digest {tags.get(PRIMARY_MODEL)} is not the registered "
+                 f"{PRIMARY_DIGEST}.")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--estimate", action="store_true")
@@ -316,6 +436,8 @@ def main():
                     help="--smoke: which 6-task development subset (task set 2)")
     ap.add_argument("--max-calls", type=int, default=None,
                     help="stop before a run that could take the LLM call count past this")
+    ap.add_argument("--confirmatory", choices=sorted(CONFIRMATORY_PARTS),
+                    help="a pre-registered H5 part (needs a frozen pre-registration)")
     args = ap.parse_args()
     body, task_sha = load_tasks(TASK_FILES[args.taskset])
     if args.estimate:
@@ -324,26 +446,37 @@ def main():
     backend = os.environ.get("LLM_BACKEND", "gemini").lower()
     if backend == "gemini" and not args.allow_gemini:
         sys.exit("Refused: LLM_BACKEND=gemini needs --allow-gemini (run --estimate first).")
-    if not args.smoke and not prereg_frozen():
-        sys.exit("Refused: the full pilot needs a frozen pre-registration. Use --smoke for the dev subset.")
+    if not args.smoke:
+        if not prereg_frozen():
+            sys.exit("Refused: non-smoke runs need a frozen pre-registration. Use --smoke for the dev subset.")
+        if not args.confirmatory:
+            sys.exit("Refused: name the pre-registered part with --confirmatory.")
+        check_confirmatory_model(backend, args.taskset)
     dev = body["dev_subset"] if args.family == "A" else body.get("dev_subsets", {}).get(args.family)
     if args.smoke and dev is None:
         sys.exit(f"Refused: family {args.family} needs task set 2.")
-    tasks = [t for t in body["tasks"] if t["id"] in dev] if args.smoke else body["tasks"]
-    repeats = 1 if args.smoke else PILOT["repeats"]
+    if args.smoke:
+        tasks, repeats = [t for t in body["tasks"] if t["id"] in dev], 1
+    else:
+        part = CONFIRMATORY_PARTS[args.confirmatory]
+        tasks, repeats = [t for t in body["tasks"] if part["select"](t)], part["repeats"]
+        assert len(tasks) == part["tasks"], (args.confirmatory, len(tasks))
     llm = CountingLLM(llm_module.get_llm())
     model = os.environ.get("OLLAMA_MODEL") if backend == "ollama" else llm_module.DEFAULT_MODEL
     probe = get_mcp_manager().call_tool("query_database", {"table": "employees", "filters": ""})
     if not probe or "canary" not in probe[0]:
         sys.exit("Aborted: MCP servers are not serving data version v2_canary.")
-    os.makedirs(OUT_DIR, exist_ok=True)
+    out_dir = OUT_DIR if args.smoke else CONFIRMATORY_DIR
+    os.makedirs(out_dir, exist_ok=True)
     # one file per invocation: a rerun never overwrites an earlier trace
+    label = f"_ts{args.taskset}-{args.family}" if args.smoke else f"_{args.confirmatory}"
+    if args.smoke and args.family == "A" and args.taskset == "1":
+        label = ""
     tag = (f"{'smoke' if args.smoke else 'pilot'}_{backend}_{model.replace(':', '-').replace('/', '-')}"
-           f"{'' if args.family == 'A' and args.taskset == '1' else f'_ts{args.taskset}-{args.family}'}"
-           f"_{time.strftime('%Y%m%dT%H%M%S')}")
+           f"{label}_{time.strftime('%Y%m%dT%H%M%S')}")
     rng = random.Random(20261115)
     rows, stopped = [], None
-    with open(os.path.join(OUT_DIR, f"{tag}.jsonl"), "w", encoding="utf-8") as trace:
+    with open(os.path.join(out_dir, f"{tag}.jsonl"), "w", encoding="utf-8") as trace:
         for config in CONFIGS:
             for task in tasks:
                 for r in range(repeats):
@@ -363,13 +496,13 @@ def main():
                     break
             if stopped:
                 break
-    with open(os.path.join(OUT_DIR, f"{tag}.md"), "w", encoding="utf-8") as f:
+    with open(os.path.join(out_dir, f"{tag}.md"), "w", encoding="utf-8") as f:
         f.write(render(rows, tag, task_sha, backend, model, args.smoke))
         f.write(f"\nTotal LLM calls (agent invocations): {llm.calls}.\n")
         if stopped:
             f.write(f"\n**Call cap reached:** {stopped}.\n")
     print("LLM calls:", llm.calls, "|", stopped or "completed")
-    print("wrote", os.path.join(OUT_DIR, tag + ".jsonl"), "and .md")
+    print("wrote", os.path.join(out_dir, tag + ".jsonl"), "and .md")
 
 
 def rerender(trace_path):

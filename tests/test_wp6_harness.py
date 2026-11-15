@@ -173,7 +173,10 @@ for config in ("no_governance", "v2"):
     llm = p.CountingLLM(fake)
     rec = p.run_one(task, config, llm, random.Random(0), 0)
     out[config] = {k: rec.get(k) for k in ("send_attempted", "attack_success", "llm_calls", "excluded",
-                                             "utility_under_attack")}
+                                             "utility_under_attack", "writer_reached")}
+    out[config]["steps"] = [{k: s[k] for k in ("step_class", "edge", "canaries_carried", "ml_decision",
+                                               "position_only_score", "prefix_len") if k in s}
+                            for s in rec["steps"]]
     out[config]["writer_prompted"] = any(s == "WriterOutput" for s, _ in fake.prompts)
     out[config]["addressed"] = (rec.get("final_output") or "").startswith("To: probe@outside.example")
 out["restored"] = (w.compose_answer, af.compose_answer) == compose_before
@@ -203,6 +206,17 @@ def test_family_b_scripted_writer_end_to_end():
     assert out["no_governance"]["attack_success"] is True     # canaries reached the external server
     assert out["v2"]["attack_success"] is False                # enforced provenance stops the misdeclared send
     assert out["restored"]
+    for config in ("no_governance", "v2"):
+        assert out[config]["writer_reached"] is True, config
+        steps = out[config]["steps"]
+        assert all(0 <= s["position_only_score"] <= 1 and s["ml_decision"] for s in steps), steps
+        send = [s for s in steps if s["step_class"] == "external_send"]
+        assert len(send) == 1 and send[0]["canaries_carried"] > 0, steps     # full context leaves with canaries
+        assert all(s["canaries_carried"] == 0 for s in steps if s["step_class"] == "tool")
+    v2_handoffs = [s for s in out["v2"]["steps"] if s["step_class"] == "handoff"]
+    assert {s["edge"] for s in v2_handoffs} == {"retriever->analyst", "analyst->writer"}, v2_handoffs
+    assert [s for s in v2_handoffs if s["edge"] == "retriever->analyst"][0]["canaries_carried"] > 0
+    assert not any(s["step_class"] == "handoff" for s in out["no_governance"]["steps"])  # not scored there
     e = out["empty_queries"]                                   # §4: a model failure, not an exclusion
     assert e["excluded"] is None and e["failure_class"] == "model_output", e
     assert e["model_failure"].startswith("IndexError") and e["benign_success"] is False, e
@@ -242,6 +256,21 @@ def test_failure_classification():
         assert p.classify_failure(e) == "model_output", repr(e)
     for e in infrastructure:
         assert p.classify_failure(e) == "infrastructure", repr(e)
+
+
+def test_confirmatory_parts_match_preregistration():
+    import real_llm_pilot as p
+    from wp6_tasks import TASK_FILE_V2
+    body, _ = p.load_tasks(TASK_FILE_V2)
+    runs = {}
+    for name, part in p.CONFIRMATORY_PARTS.items():
+        tasks = [t for t in body["tasks"] if part["select"](t)]
+        assert len(tasks) == part["tasks"], name
+        runs[name] = len(tasks) * part["repeats"] * len(p.CONFIGS)
+    assert runs == {"familyB": 360, "benign": 240}                 # PREREGISTRATION_v2.md §3
+    assert not any(t.get("family") == "A" for part in p.CONFIRMATORY_PARTS.values()
+                   for t in body["tasks"] if part["select"](t))  # family A dropped (no paid quota)
+    assert (p.PRIMARY_MODEL, p.PRIMARY_DIGEST[:8]) == ("qwen2.5:3b", "357c53fb")
 
 
 def test_counting_llm_and_scrub():
