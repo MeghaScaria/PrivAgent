@@ -258,3 +258,30 @@ index 032b3b5..2c14abe 100644
  ## Amendments
  (none)
 ```
+
+## Addendum (15 Nov 2026): commit hashes after the history rewrite
+
+Local history was rewritten to remove a home-directory path from two committed files:
+- the gemma3 smoke trace, where the path appeared in tracebacks;
+- `research_paper/PAPER_EVIDENCE_MAP.md`, where it appeared as a scratch-folder path.
+
+No other content changed; each rewritten commit differs from its original only in those files.
+There is no remote, so nothing published was affected. Hashes cited above in this report refer
+to the old commits; this table maps them:
+
+| Old | New | Commit |
+|---|---|---|
+| `ca1d6d8` | `c98a7ab` | Baseline: PrivAgent v1 as verified before v2 work (pre-WP1) |
+| `3f4fd47` | `d6b307b` | WP1: escalation-only decision combination |
+| `af23ea2` | `468aec4` | WP3: hash-chained logs, HKDF, RESTRICTED semantics, send binding |
+| `6165acf` | `a7247d7` | Gate fix: configurable MCP start timeout |
+| `15955d7` | `0a4275a` | Store frozen artifacts byte-exact (.gitattributes -text) |
+| `c4c9d65` | `a6f7fcc` | WP2: score agent handoffs as pseudo-actions |
+| `01bf703` | `bb9d53a` | Pre-registration H1/H2 revision and max_severity_reviewable arm ("commit A") |
+| `7260395` | `89bbe1b` | WP4 development half, canary data version, WP5 multiseed |
+| `e91fa38` | `b7a283d` | DRAFT pre-registration (NOT frozen, no hash recorded) |
+| `807d014` | `ea0be42` | WP6 pilot harness and smoke test |
+| `f58c5ec` | `c453674` | dev: H3/primary v2 runs, qwen2.5:3b smoke, morning report |
+| `bf9bcb0` | `9c61c52` | WP6 task set v2, harness, Gemini dev trace |
+
+Later commits (`24227d9` onward) were made after the rewrite.
