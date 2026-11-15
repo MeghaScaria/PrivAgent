@@ -45,6 +45,7 @@ import time
 import traceback
 
 import contextlib
+import http.client
 import statistics
 from unittest import mock
 
@@ -73,7 +74,6 @@ from governance.audit_logger import AuditLogger  # noqa: E402
 from governance.policy_engine import PolicyEngine  # noqa: E402
 from governance.trajectory_monitor import TrajectoryMonitor  # noqa: E402
 from langgraph.checkpoint.memory import InMemorySaver  # noqa: E402
-from pydantic import ValidationError  # noqa: E402
 from precedence_ablation import prereg_frozen  # noqa: E402
 from agents import approval_flow as approval_flow_module  # noqa: E402
 from agents import writer as writer_module  # noqa: E402
@@ -139,6 +139,40 @@ def compromised_writer(address):
     with mock.patch.object(writer_module, "compose_answer", scripted_compose), \
             mock.patch.object(approval_flow_module, "compose_answer", scripted_compose):
         yield
+
+
+# Messages of agents/mcp_client.py that mean the MCP servers are down or
+# unreachable. "MCP tool ... returned an error" is not among them: the server
+# is up and rejected a request, i.e. arguments the model chose.
+MCP_DOWN_MESSAGES = ("Failed to start MCP servers", "No connected session for server")
+INFRA_MODULE_PREFIXES = ("google.", "langchain_google_genai", "httpx", "httpcore", "requests",
+                         "urllib3", "grpc", "mcp.")
+
+
+def _is_infrastructure(exc):
+    if isinstance(exc, (TimeoutError, OSError, http.client.HTTPException)):
+        return True   # timeouts, network/HTTP/API errors (urllib's URLError is an OSError)
+    if isinstance(exc, RuntimeError) and str(exc).startswith(MCP_DOWN_MESSAGES):
+        return True
+    return type(exc).__module__.startswith(INFRA_MODULE_PREFIXES)   # LLM-provider / transport errors
+
+
+def classify_failure(exc):
+    """'infrastructure' (an exclusion: API error, timeout, MCP servers down)
+    or 'model_output' (a model failure: schema-invalid output, or agent code
+    failing on what the model produced, e.g. the retriever's IndexError on
+    an empty search_queries list). The exception and everything it was
+    raised from or during are checked; one infrastructure cause is enough."""
+    seen = set()
+    while exc is not None and id(exc) not in seen:
+        seen.add(id(exc))
+        if isinstance(exc, BaseExceptionGroup):
+            if any(classify_failure(e) == "infrastructure" for e in exc.exceptions):
+                return "infrastructure"
+        elif _is_infrastructure(exc):
+            return "infrastructure"
+        exc = exc.__cause__ or exc.__context__
+    return "model_output"
 
 
 def _scrub(text):
@@ -209,13 +243,13 @@ def run_one(task, config, llm, rng, repeat):
     try:
         with scripted:
             state = _invoke(task, config, m, llm, rng, rec, run_id)
-    except ValidationError as exc:
-        # The LLM's output did not fit the agent's schema: a model failure, not
-        # infrastructure (PREREGISTRATION_v2.md §4). Counted as task failure.
-        rec["model_failure"] = _scrub(f"{type(exc).__name__}: {exc}")[:500]
-        state = None
-    except Exception as exc:  # noqa: BLE001  (infrastructure failure -> exclusion, counted)
-        rec["excluded"] = _scrub(f"{type(exc).__name__}: {exc}")[:500]
+    except Exception as exc:  # noqa: BLE001  (classified below, counted either way)
+        # PREREGISTRATION_v2.md §4: only infrastructure failures are exclusions;
+        # a run that fails because of the model's output is a model failure.
+        kind = classify_failure(exc)
+        rec["failure_class"] = kind
+        rec["excluded" if kind == "infrastructure" else "model_failure"] = \
+            _scrub(f"{type(exc).__name__}: {exc}")[:500]
         rec["traceback"] = _scrub(traceback.format_exc())[-2000:]
         state = None
     # attempt = the writer asked governance to send (recorded even if a later step failed)
