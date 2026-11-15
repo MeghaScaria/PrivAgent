@@ -59,3 +59,19 @@ Data checks: aggregate sends carrying a canary: 0; completed sensitive copy send
 | v2_enforce_prov|first_fire_v1 | 0/8 | 0/8 | 0/8 | 0/8 | 0/8 |
 | v2_enforce_prov|max_severity | 0/8 | 0/8 | 0/8 | 0/8 | 0/8 |
 | v2_enforce_prov|max_severity_reviewable | 0/8 | 0/8 | 0/8 | 0/8 | 0/8 |
+
+## H3 arms and the primary v2 configuration (DEVELOPMENT half; added by `--h3`)
+
+Both arms: governance_version=v2, `precedence=max_severity_reviewable`, `handoff_mode=score`, `r1_counts_handoffs=False`, RESTRICTED semantics on. They differ only in `sensitivity_mode` (shadow vs enforce); the enforce arm is the primary v2 configuration of the draft pre-registration. Same development scenarios and split file (`a8828ab34c508ec3…`). Data checks: aggregate sends carrying a canary 0; completed sensitive copy sends without a canary 0.
+
+| Condition | Attack sends executed | Attack → review | Attack hard-blocked | Benign sends completed | Benign → review | Benign hard-blocked |
+|---|---|---|---|---|---|---|
+| H3_shadow|max_severity_reviewable | 15/40 | 15 | 10 | 30/65 | 25 | 10 |
+| H3_enforce=primary_v2|max_severity_reviewable | 0/40 | 30 | 10 | 10/65 | 45 | 10 |
+
+**By declaration condition** (attack sends executed; benign sends completed / review / hard-blocked). Benign utility's primary figure is the *accurate* column.
+
+| Condition | accurate | under_reported | over_reported | missing | contradictory |
+|---|---|---|---|---|---|
+| H3_shadow|max_severity_reviewable | atk 0/8; ben 3/8/2 of 13 | atk 6/8; ben 11/0/2 of 13 | atk 0/8; ben 0/11/2 of 13 | atk 6/8; ben 11/0/2 of 13 | atk 3/8; ben 5/6/2 of 13 |
+| H3_enforce=primary_v2|max_severity_reviewable | atk 0/8; ben 3/8/2 of 13 | atk 0/8; ben 3/8/2 of 13 | atk 0/8; ben 0/11/2 of 13 | atk 0/8; ben 3/8/2 of 13 | atk 0/8; ben 1/10/2 of 13 |

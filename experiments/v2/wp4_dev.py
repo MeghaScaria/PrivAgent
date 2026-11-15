@@ -67,6 +67,14 @@ V2_MODES = {"v2_shadow": dict(handoff_mode="shadow"),
             "v2_score_r1off": dict(handoff_mode="score", r1_counts_handoffs=False),
             "v2_enforce_prov": dict(handoff_mode="shadow", sensitivity_mode="enforce")}
 CONDITIONS = [("v1", None, None)] + [(f"{mode}|{arm}", mode, arm) for mode in V2_MODES for arm in ARMS]
+# --h3: the exact H3 arms of PREREGISTRATION_v2.md (both max_severity_reviewable,
+# scored handoffs, R1 off); the enforce arm is the primary v2 configuration.
+V2_MODES.update({
+    "h3_shadow": dict(handoff_mode="score", r1_counts_handoffs=False, sensitivity_mode="shadow"),
+    "primary_v2": dict(handoff_mode="score", r1_counts_handoffs=False, sensitivity_mode="enforce"),
+})
+H3_CONDITIONS = [("H3_shadow|max_severity_reviewable", "h3_shadow", "max_severity_reviewable"),
+                 ("H3_enforce=primary_v2|max_severity_reviewable", "primary_v2", "max_severity_reviewable")]
 LOGDIR = tempfile.mkdtemp(prefix="wp4_dev_")
 
 
@@ -202,6 +210,8 @@ def summarise(rows):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--confirmatory", action="store_true")
+    ap.add_argument("--h3", action="store_true",
+                    help="run only the H3 arms (development half) and append them to wp4_dev.md")
     args = ap.parse_args()
     if args.confirmatory:
         sys.exit("Refused: development script; the confirmatory half needs a frozen pre-registration "
@@ -213,23 +223,31 @@ def main():
     probe = get_mcp_manager().call_tool("query_database", {"table": "employees", "filters": ""})
     if not probe or "canary" not in probe[0]:
         sys.exit("Aborted: MCP servers are not serving data version v2_canary.")
+    conditions = H3_CONDITIONS if args.h3 else CONDITIONS
     rows, t0 = [], time.time()
-    total = len(dev) * len(DECLARATION_CONDITIONS) * len(CONDITIONS)
-    for i, (name, mode, arm) in enumerate(CONDITIONS):
+    total = len(dev) * len(DECLARATION_CONDITIONS) * len(conditions)
+    for i, (name, mode, arm) in enumerate(conditions):
         for s in dev:
             for d in DECLARATION_CONDITIONS:
                 rows.append(run_one(s, d, name, mode, arm))
-        print(f"[{i + 1}/{len(CONDITIONS)}] {name}: {len(rows)}/{total} runs, {time.time() - t0:.0f}s", flush=True)
+        print(f"[{i + 1}/{len(conditions)}] {name}: {len(rows)}/{total} runs, {time.time() - t0:.0f}s", flush=True)
     # data checks: aggregate sends never carry a canary; copy-mode sensitive sends do when completed
     agg_leaks = [r for r in rows if r["category"] == "benign_aggregate" and r["canaries_sent"]]
     copy_missing = [r for r in rows if r["outcome"] == "completed" and r["provenance_sensitive"]
                     and r["category"] in ("benign_legit_sensitive", "attack") and not r["canaries_sent"]]
     report = {"mode": "development", "data_version": "v2_canary", "split_file_sha256": split_sha,
               "dev_scenarios": [s.id for s in dev], "declaration_conditions": DECLARATION_CONDITIONS,
-              "conditions": [c[0] for c in CONDITIONS], "runs": rows, "summary": summarise(rows),
+              "conditions": [c[0] for c in conditions], "runs": rows, "summary": summarise(rows),
               "data_checks": {"aggregate_sends_with_canary": len(agg_leaks),
                               "completed_sensitive_copy_sends_without_canary": len(copy_missing)}}
     os.makedirs(OUT_DIR, exist_ok=True)
+    if args.h3:
+        with open(os.path.join(OUT_DIR, "wp4_dev_h3.json"), "w", encoding="utf-8") as f:
+            json.dump(report, f, indent=2)
+        with open(os.path.join(OUT_DIR, "wp4_dev.md"), "a", encoding="utf-8") as f:
+            f.write("\n" + render_h3(report))
+        print("wrote wp4_dev_h3.json and appended to wp4_dev.md | data checks:", report["data_checks"])
+        return
     stem = os.path.join(OUT_DIR, "wp4_dev")
     with open(stem + ".json", "w", encoding="utf-8") as f:
         json.dump(report, f, indent=2)
@@ -272,6 +290,40 @@ def render(r):
     for cond in r["conditions"]:
         a = r["summary"][cond]["attack_sends_by_declaration"]
         out.append(f"| {cond} | " + " | ".join(f"{a[d]}/{n_att}" for d in DECLARATION_CONDITIONS) + " |")
+    return "\n".join(out) + "\n"
+
+
+def render_h3(r):
+    """Section appended to wp4_dev.md for the --h3 run."""
+    rows = r["runs"]
+    out = ["## H3 arms and the primary v2 configuration (DEVELOPMENT half; added by `--h3`)", "",
+           "Both arms: governance_version=v2, `precedence=max_severity_reviewable`, `handoff_mode=score`, "
+           "`r1_counts_handoffs=False`, RESTRICTED semantics on. They differ only in `sensitivity_mode` "
+           "(shadow vs enforce); the enforce arm is the primary v2 configuration of the draft "
+           f"pre-registration. Same development scenarios and split file (`{r['split_file_sha256'][:16]}…`). "
+           f"Data checks: aggregate sends carrying a canary {r['data_checks']['aggregate_sends_with_canary']}; "
+           f"completed sensitive copy sends without a canary "
+           f"{r['data_checks']['completed_sensitive_copy_sends_without_canary']}.", "",
+           "| Condition | Attack sends executed | Attack → review | Attack hard-blocked | Benign sends completed "
+           "| Benign → review | Benign hard-blocked |", "|---|---|---|---|---|---|---|"]
+    for cond in r["conditions"]:
+        x = r["summary"][cond]
+        out.append(f"| {cond} | {x['attack_sends_executed']}/{x['attack_runs']} | {x['attack_sent_to_review']} | "
+                   f"{x['attack_hard_blocked']} | {x['benign_sends_completed']}/{x['benign_send_runs']} | "
+                   f"{x['benign_sent_to_review']} | {x['benign_hard_blocked']} |")
+    out += ["", "**By declaration condition** (attack sends executed; benign sends completed / review / "
+            "hard-blocked). Benign utility's primary figure is the *accurate* column.", "",
+            "| Condition | " + " | ".join(DECLARATION_CONDITIONS) + " |", "|---|" + "---|" * len(DECLARATION_CONDITIONS)]
+    for cond in r["conditions"]:
+        cells = []
+        for d in DECLARATION_CONDITIONS:
+            att = [x for x in rows if x["condition"] == cond and x["declaration"] == d and x["label"] == "attack"]
+            ben = [x for x in rows if x["condition"] == cond and x["declaration"] == d and x["label"] == "benign"
+                   and x["send_requested"]]
+            oc = lambda o: sum(x["outcome"] == o for x in ben)  # noqa: E731
+            cells.append(f"atk {sum(x['canaries_sent'] > 0 for x in att)}/{len(att)}; ben "
+                         f"{oc('completed')}/{oc('review')}/{oc('hard_blocked')} of {len(ben)}")
+        out.append(f"| {cond} | " + " | ".join(cells) + " |")
     return "\n".join(out) + "\n"
 
 
