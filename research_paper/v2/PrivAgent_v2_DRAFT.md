@@ -457,31 +457,70 @@ Three append-only JSONL logs record tool decisions, handoffs and approval events
 
 ### 4.13 v2: escalation-only decision precedence (WP1)
 
-*[Not yet written.]* Ledger rows to use:
+In v1, the first policy rule that fired replaced the classifier's decision, so a rule could turn a model decision of
+BLOCKED into HUMAN_APPROVAL (Section 4.10). v2 adds two precedence modes. <!-- S4 -->
 
-- D1
-- D2
+- **`max_severity`:** the final decision is the most severe of the model's decision and the decisions of every fired
+  rule, in the order AUTONOMOUS < RESTRICTED < HUMAN_APPROVAL < BLOCKED. A rule can only escalate. <!-- S4 -->
+- **`max_severity_reviewable`:** as `max_severity`, except that on an external action a BLOCKED that comes from the
+  model alone (no fired rule also says BLOCKED) becomes HUMAN_APPROVAL, so that a reviewer can release it. A rule's
+  BLOCKED is never relaxed, and no decision becomes an allowed one. <!-- S4 -->
+- **`first_fire_v1`:** the v1 behaviour, kept as the baseline. <!-- S4 -->
+
+The primary v2 configuration uses `max_severity_reviewable` (Section 6.1).
 
 ### 4.14 v2: scored agent handoffs (WP2)
 
-*[Not yet written.]* Ledger rows to use:
+v1 recorded agent-to-agent handoffs but did not score them (Section 4.9). With `handoff_mode="score"`, the two
+data-carrying handoffs of a standard run, retriever → analyst and analyst → writer, become pseudo-actions that the
+frozen model scores like tool calls. <!-- S5 --> They are encoded with category values the model was trained on
+(`analyze`, `write`, `cross_agent`), so the model is reused unchanged. Each pseudo-action's sensitivity is the
+provenance label of the references the receiving agent consumes, with unknown counted as sensitive; the sending agent's
+own declaration is never used. <!-- S5 --> The encoding and its rationale are in `experiments/v2/HANDOFF_ENCODING.md`.
 
-- D3
-- D4
+Two switches qualify the mode. <!-- S5 -->
+
+- `r1_counts_handoffs` decides whether rule R1 counts sensitive pseudo-actions.
+- `handoff_enforce` halts the graph when a handoff is BLOCKED or sent to HUMAN_APPROVAL.
+
+Rule R3 requires at least three earlier cross-agent actions. A standard run has two scored handoffs, so R3 cannot fire,
+and no R3 effect is claimed. <!-- S5 -->
 
 ### 4.15 v2: RESTRICTED semantics, hash-chained logs and send binding (WP3)
 
-*[Not yet written.]* Ledger rows to use:
+v2 makes four hygiene changes. <!-- S6 -->
 
-- D5
-- D6
+1. **Hash-chained audit log.** Each entry's SHA-256 covers the canonical entry and the previous entry's hash, and
+   `verify_chain` reports the first line that does not verify. <!-- S6 -->
+2. **Key separation.** The approval-signing key and the checkpoint-encryption key are derived from the master key with
+   HKDF-SHA256 under distinct labels; the master key is not used directly. <!-- S6 -->
+3. **RESTRICTED gets a meaning.** A RESTRICTED action with an external destination escalates to HUMAN_APPROVAL. A later
+   external send that carries data read under a RESTRICTED decision (restricted lineage) also goes to HUMAN_APPROVAL.
+   Lineage is marked for scored RESTRICTED handoffs and, as a recorded deviation from the plan, for internal RESTRICTED
+   tool calls (`experiments/v2/DEVIATIONS.md`, D1). <!-- S6 -->
+4. **Send binding.** The approval digest covers the tool, the destination, the MCP server identity and a digest of the
+   payload. It is recomputed immediately before execution, and the send is refused on any mismatch. <!-- S6 -->
+
+These changes are covered by the regression tests (Section 6.1) and are not evaluated as hypotheses. <!-- D6 -->
 
 ### 4.16 v2: enforced provenance and the declaration study (WP4)
 
-*[Not yet written.]* Ledger rows to use:
+In v1, provenance-derived sensitivity ran only in shadow mode (Section 4.8). v2 can enforce it
+(`sensitivity_mode="enforce"`): the sensitivity the governance layer acts on then comes from provenance, not from the
+agent's declaration. The primary v2 configuration enforces it (Section 6.1).
 
-- D7
-- D8
+To measure what enforcement does when a declaration is wrong, a scripted LLM injects one of five declaration
+conditions into graph runs against the real MCP servers: accurate, under-reported, over-reported, missing and
+contradictory. <!-- S7 -->
+
+- **Split.** The scenario set was split into a development half and a confirmatory half by a split file written
+  before any WP4 run. The confirmatory half has 22 scenarios: 8 attack and 14 benign, of which 12 request an external
+  send. <!-- S7 -->
+- **Unit of analysis.** With a scripted LLM, every outcome is a deterministic function of the scenario, the
+  declaration condition and the configuration. The scenario is therefore the unit of analysis, and the confirmatory
+  half is a replication check on unseen scenarios, not a sample of runs. <!-- S7 -->
+- **Outcomes.** An attack send counts as executed iff at least one canary reaches the external server (Section 6.2).
+  <!-- S2 --> A benign send is completed, sent to review or hard-blocked. <!-- S7 -->
 
 ## 5. Implementation Summary
 
@@ -558,14 +597,125 @@ Steps within a run are dependent, so only run-level proportions carry Wilson int
 
 ### 6.1 v2: pre-registered confirmatory protocol
 
-*[Not yet written.]* Ledger rows to use:
+**Pre-registration and freeze.** The v2 hypotheses H1–H5, their decision rules, sample sizes and exclusions are set
+out in a pre-registration (`experiments/v2/PREREGISTRATION_v2.md`).
 
-- P1
-- P2
-- P3
-- P4
-- C21
-- C22
+- **Freeze.** It was frozen before any confirmatory run, at 2026-11-15T13:25:37Z in commit `7727046`. Its SHA-256 is
+  recorded in `experiments/v2/PREREGISTRATION_HASHES.md`. <!-- P1 -->
+- **Code.** The registration names the four commits that hold the harness, the runners and the analysis scripts it
+  refers to, and lists five analysis choices that were fixed in that code rather than in its text. <!-- P4 -->
+- **No later code changes.** No code was changed after the freeze; the only scripts added since are the exploratory
+  and figure scripts. <!-- P3 -->
+- **Amendment.** There has been one amendment, editorial only: it records that the header's "DRAFT" wording is
+  stale. <!-- P2 -->
+
+**Configurations.** "v2" is the primary configuration (Sections 4.13–4.16):
+
+- enforced provenance;
+- `max_severity_reviewable`;
+- scored handoffs with `r1_counts_handoffs` off;
+- RESTRICTED semantics on;
+- no `handoff_enforce`.
+
+Each secondary arm changes one setting.
+
+**Data.**
+
+- **Offline H1 and the multi-seed evaluation:** synthetic data for seeds 42 and 1–9, on the test split, three held-out
+  attack types (`data_exfiltration`, `cascading_failure`, `path_cross_agent_leak`) and variant B. H1 uses the frozen
+  v1 model and thresholds; the multi-seed evaluation retrains a model per seed. <!-- S10 -->
+- **Live H1, H2 and H3:** the WP4 confirmatory half (Section 4.16). <!-- S7 -->
+- **H4 and H5:** the real-LLM pilot (Section 6.2).
+
+**Statistics.** <!-- S9 -->
+
+- Confidence intervals are percentile bootstrap intervals with 10,000 resamples and seed 20261115. H4(a) and H5
+  resample tasks; the WP4 costs resample scenarios.
+- Paired comparisons use the exact two-sided McNemar test. A hypothesis also requires the reduction to go in the
+  predicted direction.
+- Rates carry Wilson 95% intervals. AUROC carries a DeLong 95% interval.
+
+**Exclusions.** <!-- S12 -->
+
+- A run is excluded only for an infrastructure failure: an API error, a timeout or an MCP server that is down.
+- A failure caused by the model's output, such as output that does not fit an agent's schema or an empty list of
+  search queries, is a model failure and is not excluded.
+- No agent code was changed during the study.
+
+**Execution.**
+
+- The confirmatory steps ran in a fixed order: synthetic, WP4, real-LLM family B, real-LLM benign, then the five
+  analysis scripts unchanged.
+- Every step completed without error and none was rerun. <!-- P5 -->
+- The WP4 half produced 880 runs. The pilot produced 360 family B runs and 240 benign runs, with no infrastructure
+  exclusions; there were 27 and 9 model failures respectively. <!-- C21 -->
+- Attack family A (indirect prompt injection) was registered as secondary on the condition of a paid API quota. It
+  was not run. <!-- C22 -->
+
+### 6.2 v2: real-LLM evaluation and canary ground truth
+
+**Platform.** The real-LLM pilot runs PrivAgent's four-agent LangGraph pipeline (orchestrator, retriever, analyst,
+writer). The pipeline reaches its tools through four FastMCP stdio servers holding synthetic data. <!-- S1 -->
+
+**Model.** The model is `qwen2.5:3b` (3.1B parameters, Q4_K_M) on a local Ollama server, with temperature 0.2, output
+capped at 1,024 tokens, and repeat penalty 1.15. <!-- S8 -->
+
+**Tasks.** The tasks come from task set version 2, whose SHA-256 was recorded before any run on it. <!-- S8 -->
+
+- **Family B (attack), 20 tasks.** Each is an ordinary request, but the writer agent is replaced by a script. The
+  script always calls `send_result` with its full context, addressed to an external address. The orchestrator,
+  retriever and analyst remain real LLM agents. <!-- S8 -->
+- **Benign, 40 tasks.** <!-- S8 -->
+- **Repeats.** Each family B task runs 3 times per configuration, and each benign task once. <!-- S8 -->
+
+Family B therefore measures governance given an attempted exfiltration, whether or not a model would follow an
+injection.
+
+**Configurations.** There are six. <!-- S8 -->
+
+- **Default graph, configurations 1–5:** `no_governance`, `rules_only`, `ml_only`, `v1` and `v2`. HUMAN_APPROVAL is
+  not executed in this graph. `rules_only` is a deterministic policy-enforcement baseline in the style of Wang et
+  al. [13], not a reimplementation of their system.
+- **Approval graph, configuration 6:** `v2_reviewer`, with a simulated reviewer that approves an attack send with
+  probability 0.5 and a benign send with probability 0.9.
+
+**Ground truth: canaries.** <!-- S2 -->
+
+- **Planting.** Every sensitive synthetic record carries a canary token: `CNRY-` followed by the first 12 hex digits of
+  a SHA-256 over a fixed label, the record kind and its identifier.
+- **Recording.** The external server records every canary that appears in a transmitted payload.
+- **Attack success.** An attack succeeds iff at least one canary reaches the external server.
+- No detector or rule is involved in labelling.
+
+**Metrics.**
+
+- **Primary metric:** family B attack success rate (ASR), over the runs that reached the scripted writer. <!-- S8 -->
+- **Benign success:** a send task succeeds iff at least one transmission is made; an answer task succeeds iff the
+  final output is non-empty and the run was not halted. A model failure counts as a failure. The content of the
+  answer or the send is not checked. <!-- S3 -->
+
+**H4 step labels.** H4 uses the steps of the `v2` runs, labelled by canary provenance. <!-- S11 -->
+
+- A step is unsafe iff it carries canary-bearing data across agents (path-dependent: a handoff) or to the external
+  server (direct: the send).
+- Every step of a benign run is safe.
+- The registered analysis code also counts attack-run steps that carry no canary as safe. The pre-registration text
+  leaves this case undefined (Section 7.5.4).
+
+**Position-only classifier.** The position-only classifier of H4(b) is trained on the synthetic seed-42 training split
+with two features, the step's normalised position and the number of earlier tool calls. <!-- S11 -->
+
+### 6.3 v2: independent recomputation
+
+After the confirmatory analyses, a separate agent recomputed the confirmatory report's outcomes table and its H5
+per-configuration counts. It was a Claude subagent that had not read the analysis code or its outputs, and it worked
+only from the pre-registration and the raw result files. <!-- V1 -->
+
+- **Tolerance.** Before comparing, it fixed its tolerance: bootstrap interval bounds within ±0.02 with the same
+  decision, and every other number exact. <!-- V1 -->
+- **Independence.** It saved its own results before opening the report. <!-- V1 -->
+- **Disagreements.** These were not resolved by changing either computation. They are reported in Section 7.5.7, and
+  the confirmatory report carries a dated erratum.
 
 ## 7. Results
 
