@@ -962,73 +962,241 @@ This supports the claim of at most one execution attempt per action ID, and it e
 
 #### 7.5.1 H1: escalation-only precedence
 
-*[Not yet written.]* Ledger rows to use:
+**H1 is supported.** Under `max_severity` there were no downgrade events, either offline or live. <!-- C3 --> <!-- C1 --> <!-- C2 -->
 
-- C1
-- C2
-- C3
-- C4
-- C5
-- C6
-- Figure: `research_paper/v2/figures/v2_f3_h1_live_costs.png`
+**Downgrades by arm.**
+
+| Arm | Offline downgrades (10 seeds × 3 sets) | Live downgrades (WP4) |
+|---|---|---|
+| `first_fire_v1` | 463 | 70 |
+| `max_severity` | 0 | 0 |
+| `max_severity_reviewable` | 376 | 70 |
+
+<!-- C1 --> <!-- C2 -->
+
+Every downgrade under `first_fire_v1` and `max_severity_reviewable` was a model BLOCKED that became HUMAN_APPROVAL on
+an external action. None of them became an allowed decision. <!-- C1 --> <!-- C2 -->
+
+**Measured costs (no thresholds).**
+
+- **Offline:** every cost difference from `first_fire_v1` was 0.000. <!-- C5 -->
+- **Live, accurate declaration, `max_severity`:** it hard-blocked a benign send in 10 of 14 benign runs, against 2 of
+  14 under `first_fire_v1`, a difference of 0.571 (95% CI [0.286, 0.786]). Its approval volume was 2 of 14 against
+  10 of 14. <!-- C4 -->
+- **Per send:** these rates are per benign run. Only 12 of the 14 runs request a send. Per benign send the
+  hard-blocked figures are 10 of 12 against 2 of 12, a difference of 0.667 (see the erratum, Section 7.5.7).
+  <!-- C4b -->
+- **`max_severity_reviewable`:** it matched `first_fire_v1` on both costs, with 2 of 14 benign runs hard-blocked and
+  10 of 14 sent to approval. <!-- C5 -->
+
+**Secondary metric.** Live, the share of attack-run send decisions ending at HUMAN_APPROVAL was 30 of 40 under
+`first_fire_v1`, 0 of 40 under `max_severity` and 30 of 40 under `max_severity_reviewable`. <!-- C6 -->
+
+![H1 live costs per precedence arm](figures/v2_f3_h1_live_costs.png)
+
+*Figure V2-3. H1 live costs per precedence arm (WP4 confirmatory half, benign runs, accurate declaration), Wilson
+95% intervals. The denominators are benign runs (Section 7.5.7).* <!-- C4 --> <!-- C5 -->
 
 #### 7.5.2 H2: scored handoffs
 
-*[Not yet written.]* Ledger rows to use:
+**H2 is supported.** <!-- C8 --> Arms are paired by scenario and declaration condition over 40 pairs (8 attack
+scenarios × 5 conditions), with shadow provenance and `max_severity_reviewable` throughout. <!-- C7 --> <!-- S7 -->
 
-- C7
-- C8
-- C9
+| Comparison | Canary-confirmed attack sends | Exact McNemar p | Ledger |
+|---|---|---|---|
+| shadow vs score, R1 counting handoffs | 14 of 40 → 0 of 40 | 0.000122 | <!-- C7 --> C7 |
+| shadow vs score, R1 not counting them | 14 of 40 → 14 of 40 | 1 | <!-- C8 --> C8 |
+
+The reduction appears only when R1 counts the sensitive pseudo-actions; scoring the handoffs without that has no effect
+on attack sends here. <!-- C7 --> <!-- C8 -->
+
+**Measured cost.** With `handoff_enforce` (score, R1 not counting handoffs), 10 of 70 benign runs halted at a
+handoff: 0.143, Wilson 95% [0.079, 0.243]. <!-- C9 -->
+
+**R3.** R3 fired in none of these decisions. <!-- C9 -->
+
+The p-values for the WP4 results quantify consistency across the confirmatory scenarios, not the sampling variability of an LLM, because WP4 outcomes are deterministic (Section 4.16). <!-- S7 -->
 
 #### 7.5.3 H3: enforced provenance
 
-*[Not yet written.]* Ledger rows to use:
+**H3 is supported.** In the under-reported and missing declaration conditions, canary-confirmed attack sends fell from
+12 of 16 under shadow provenance to 0 of 16 under enforced provenance (exact McNemar p = 0.000488). <!-- C10 -->
 
-- C10
-- C11
+**Measured costs, benign sends.**
+
+- **Accurate declaration:** enforcement changed nothing. Both arms completed 2 of 12 sends, sent 8 of 12 to review and
+  hard-blocked 2 of 12. <!-- C11 -->
+- **Under-reported and missing declarations:** enforcement completed 2 of 12 benign sends, where shadow provenance
+  completed 10 of 12. <!-- C11 -->
+
+The p-values for the WP4 results quantify consistency across the confirmatory scenarios, not the sampling variability of an LLM, because WP4 outcomes are deterministic (Section 4.16). <!-- S7 -->
 
 #### 7.5.4 H4: shortcut vs generalisation on real traces
 
-*[Not yet written.]* Ledger rows to use:
+**Steps analysed.** The analysis covers 397 labelled steps of the `v2` runs. They come from 19 attack tasks and the
+benign runs. <!-- C14 -->
 
-- C12
-- C13
-- C14
-- Figure: `research_paper/v2/figures/v2_f4_h4a_recall.png`
+- **The missing attack task:** all three `v2` runs of `atk_b_hr_depts` failed before the writer, so it contributes no
+  steps. <!-- C14 -->
+- **A task with only safe steps:** `atk_b_ai_infra_hr` reached the writer but carried no canary, so all its steps are
+  safe ones. <!-- C14 -->
+
+**H4(a) is supported.** The frozen model stopped (HUMAN_APPROVAL or BLOCKED) 1 of 62 path-dependent unsafe steps and
+52 of 52 direct ones. The difference in recall is −0.984, with a 95% bootstrap CI over tasks of [−1.000, −0.948].
+<!-- C12 -->
+
+![H4(a) path vs direct recall](figures/v2_f4_h4a_recall.png)
+
+*Figure V2-4. The frozen model's step recall on the `v2` real traces, path-dependent (handoff) vs direct (external
+send) unsafe steps, Wilson 95% intervals.* <!-- C12 -->
+
+**H4(b) is not supported.** The position-only classifier reached AUROC 0.654 (DeLong 95% [0.601, 0.706]) on 114
+unsafe and 283 safe steps, above the registered threshold of 0.6. <!-- C13 -->
+
+**An undefined label (sensitivity analysis).** This result depends on a label the pre-registration did not define.
+
+- **The case:** attack-run steps that carry no canary. The registered analysis code counts them as safe.
+  <!-- C13 -->
+- **Leaving them unlabelled:** this gives 142 safe steps and AUROC 0.599 (DeLong 95% [0.530, 0.668]). <!-- C13b -->
+- **Status:** that figure is a sensitivity analysis computed in the independent check, not the confirmatory result. The
+  registered outcome stands. <!-- C13b -->
 
 #### 7.5.5 H5: defence comparison on a real LLM
 
-*[Not yet written.]* Ledger rows to use:
+**H5 is supported.** On family B, `v2` had a lower attack success rate than `v1` and than `ml_only`.
 
-- C15
-- C16
-- C17
-- C18
-- C18b
-- Figures: `research_paper/v2/figures/v2_f1_h5_asr.png`, `v2_f2_benign_utility.png`
+- **v2 − v1:** −0.281 (95% bootstrap CI over tasks [−0.431, −0.145]). <!-- C16 -->
+- **v2 − ml_only:** −0.345 ([−0.517, −0.186]). <!-- C16 -->
+- **v2 − rules_only:** −0.321 ([−0.517, −0.148]). That interval also lies entirely below 0, so the registered claim
+  that `v2` beats `rules_only` is made. <!-- C17 -->
+
+| Configuration | Runs | Model failures before the writer | Reached the writer | Attack successes |
+|---|---|---|---|---|
+| no_governance | 60 | 6 | 54 | 51 of 54 |
+| rules_only | 60 | 4 | 56 | 18 of 56 |
+| ml_only | 60 | 2 | 58 | 20 of 58 |
+| v1 | 60 | 3 | 57 | 16 of 57 |
+| v2 | 60 | 5 | 55 | 0 of 55 |
+| v2_reviewer | 60 | 7 | 53 | 17 of 53 |
+
+<!-- C15 --> <!-- C21 -->
+
+No run was excluded for an infrastructure failure, and there were no harness faults. <!-- C15 -->
+
+**What stopped the `v2` sends.** The frozen model's own decision on the send step was BLOCKED for all 52 sends that
+carried a canary. <!-- C24 -->
+
+- **Relaxed to review:** `max_severity_reviewable` relaxed 44 of them to HUMAN_APPROVAL, which is not executed in the
+  `v2` configuration. <!-- C24 -->
+- **Kept blocked:** 8 stayed BLOCKED. <!-- C24 -->
+- **Where the model failed:** the handoffs, not the send. It flagged 1 of the 62 path-dependent handoffs (Section
+  7.5.4). <!-- C24 --> <!-- C12 -->
+- **With a reviewer:** in `v2_reviewer`, where a simulated reviewer approves an attack send with probability 0.5, 17
+  of 53 attacks succeeded. <!-- C15 --> <!-- S8 -->
+
+![H5 attack success per configuration](figures/v2_f1_h5_asr.png)
+
+*Figure V2-1. Family B attack success rate per configuration (`qwen2.5:3b`), Wilson 95% intervals; denominators are
+the runs that reached the scripted writer.* <!-- C15 -->
+
+**Benign utility (40 tasks, one run each).** <!-- C18 -->
+
+| Configuration | Benign success | Wilson 95% |
+|---|---|---|
+| no_governance | 23 of 40 = 0.575 | [0.422, 0.715] |
+| rules_only | 19 of 40 | – |
+| ml_only | 20 of 40 | – |
+| v1 | 20 of 40 | – |
+| v2 | 18 of 40 = 0.450 | [0.307, 0.602] |
+| v2_reviewer | 22 of 40 | – |
+
+The intervals of the other configurations are in Figure V2-2.
+
+- **Approval volume:** benign runs with at least one step sent to approval numbered 2 under `v1`, 5 under `v2`, 5
+  under `v2_reviewer` and 0 elsewhere (of 40). <!-- C18 -->
+- **Latency, all runs pooled:** the median seconds per run, over family B and benign runs together, ranged from 72
+  to 106 across configurations. <!-- C18b -->
+- **Latency, benign runs only:** the median ranged from 81.4 to 94.0. <!-- C18c -->
+
+![Benign utility per configuration](figures/v2_f2_benign_utility.png)
+
+*Figure V2-2. Benign task success per configuration (40 tasks, `qwen2.5:3b`), Wilson 95% intervals.* <!-- C18 -->
 
 #### 7.5.6 Multi-seed offline evaluation (descriptive)
 
-*[Not yet written.]* Ledger rows to use:
+**Set-level results.** Ten seeds, each with its own model trained and tuned on its own splits. The table gives means
+over seeds; for AUPRC, with a 95% bootstrap CI. This analysis is descriptive and tests no hypothesis. <!-- C19 -->
+<!-- S10 -->
 
-- C19
-- C20
-- Figure: `research_paper/v2/figures/v2_f5_multiseed_heldout.png`
+| Set | AUPRC (95% CI) | Step recall | Runs caught |
+|---|---|---|---|
+| test | 0.965 [0.960, 0.968] | 0.953 | 0.999 |
+| held-out attack types | 0.853 [0.847, 0.860] | 0.562 | 0.672 |
+| variant B | 0.834 [0.828, 0.841] | 0.338 | 0.671 |
+
+<!-- C19 -->
+
+**Per attack type.** The attacks missed are the path-dependent types; every other type was caught at 0.995 or
+above. <!-- C20 -->
+
+| Path-dependent type | Set | Runs caught, pooled over seeds |
+|---|---|---|
+| `path_cross_agent_leak` | held-out type | 28 of 1,011 (0.028) |
+| `path_exfiltration` | variant B | 18 of 505 (0.036) |
+| `path_privilege_escalation` | variant B | 12 of 513 (0.023) |
+
+<!-- C20 -->
+
+![Held-out per-type run-level recall](figures/v2_f5_multiseed_heldout.png)
+
+*Figure V2-5. Run-level recall per attack type on the held-out types and variant B, pooled over 10 seeds, Wilson 95%
+intervals.* <!-- C20 -->
 
 #### 7.5.7 Independent recomputation
 
-*[Not yet written.]* Ledger rows to use:
+**Agreement.** The independent recomputation (Section 6.3) checked 53 items. 44 matched, 2 were within tolerance, and 7
+did not match. <!-- V1 --> The 7 mismatches come from three readings of a definition. Every hypothesis decision
+agrees except H4(b), which depends on one of those readings. <!-- V1 --> The confirmatory report carries a dated
+erratum covering all four points below.
 
-- V1
+1. **H1 live cost denominator.** The registered code divides by benign runs. The pre-registration's wording is
+   "benign sends". Per send, the difference is 0.667 rather than 0.571. No decision depends on this cost. <!-- C4 --> <!-- C4b -->
+2. **H4(b) label.** See Section 7.5.4. The registered outcome, AUROC 0.654 and not supported, stands; 0.599 is a
+   sensitivity analysis. <!-- C13 --> <!-- C13b -->
+3. **Latency scope.** The pre-registration does not define the scope of latency. The report's range pools family B
+   and benign runs; over benign runs alone it is 81.4 to 94.0 seconds. <!-- C18b --> <!-- C18c -->
+4. **A wrong observation.** The confirmatory report originally said the frozen model's own decisions did not stop the
+   `v2` sends. That was wrong. The model's decision was BLOCKED on all 52 canary-bearing sends (Section 7.5.5).
+   <!-- C24 -->
 
 ### 7.6 v2 exploratory analyses (EXPLORATORY)
 
-*[Not yet written.]* Ledger rows to use:
+**EXPLORATORY.** The analyses in this section were not pre-registered. They read only the confirmatory traces and
+change no confirmatory outcome.
 
-- X1
-- X2
-- X3
-- X4
+**How the `v2` family B runs ended.** Of the 55 runs that reached the writer, 8 were hard-blocked and 44 were sent to
+review. The remaining 3 were allowed, and none leaked. All 3 allowed runs belong to one task whose send carried no
+canary. <!-- X1 -->
+
+**Reviewer sweep.** This estimates the attack success expected if a reviewer approved each of the 44 sent-to-review,
+canary-carrying sends with probability p. It assumes that an approved send executes and delivers its canaries.
+<!-- X2 --> <!-- X1 -->
+
+| P(approve \| attack) | Expected ASR | 95% CI (bootstrap over tasks) |
+|---|---|---|
+| 0.1 | 0.080 | [0.062, 0.095] |
+| 0.3 | 0.240 | [0.185, 0.284] |
+| 0.5 | 0.400 | [0.309, 0.474] |
+| 0.93 | 0.744 | [0.575, 0.881] |
+
+<!-- X2 -->
+
+**Comparison with the run configuration.** `v2_reviewer` actually ran with p = 0.5. It observed 17 of 53 = 0.321,
+where 0.387 would be expected from its own count of sends that reached review. <!-- X4 -->
+
+**H4(b) without the writer's send step.** Leaving out each run's final external send, the position-only AUROC is
+0.567 (DeLong 95% [0.508, 0.625]) on 62 unsafe and 278 safe steps. With the send step included it is 0.654. This
+analysis uses the registered code's labels. <!-- X3 -->
 
 ### 7.7 v2 development results (not confirmatory)
 
