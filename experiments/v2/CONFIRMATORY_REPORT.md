@@ -90,3 +90,25 @@ ran alongside the confirmatory steps.
 Known text issue: the frozen pre-registration's header still reads "DRAFT … still unfrozen, no hash
 recorded". The freeze is recorded in `PREREGISTRATION_HASHES.md`; correcting the header would be a
 dated amendment.
+
+## Erratum, 17 Nov 2026
+
+Added after the independent recomputation (`experiments/v2/INDEPENDENT_CHECK.md`, commit `b39b664`). The text
+above is unchanged; this section corrects or qualifies it. No hypothesis outcome changes.
+
+1. **What stopped the v2 sends (M4; corrects "Observations", second bullet).** The statement "The frozen model's own step
+   decisions are not what stopped these sends" is wrong. In the `v2` family B traces, the frozen
+   model's own decision on the send step was BLOCKED for all 52 sends that carried a canary. `max_severity_reviewable`
+   relaxed 44 of them to HUMAN_APPROVAL (sent to review, not executed in `v2`), and 8 stayed BLOCKED. What the model
+   missed was the handoffs (1 of 62 path-dependent steps flagged, H4(a)), not the sends.
+2. **H1 live cost denominator (M1; qualifies "Measured costs", first bullet).** The hard-blocked figures 10/14 and
+   2/14 are per benign run: 14 benign runs under accurate declaration, as `h1.py` computes them. Only 12 of those
+   runs request an external send. Per benign send, which is the pre-registration's wording, the figures are 10/12
+   vs 2/12, a difference of 0.667 rather than 0.571. No decision depends on this cost.
+3. **Latency scope (M3; qualifies "Measured costs", H5 benign utility bullet).** "Median seconds per run: 72–106" is
+   the median over all runs of a configuration, family B and benign pooled (71.6–105.5 s). Over benign runs only it
+   is 81.4–94.0 s. The pre-registration does not define the scope.
+4. **H4(b) (M2).** The registered outcome stands: AUROC 0.654, DeLong 95% [0.601, 0.706], NOT SUPPORTED. It was
+   computed by the registered code (`h4.py`, `843d157`), which labels the steps of attack runs that carry no canary
+   as safe. The pre-registration text does not say how to label those steps. Leaving them unlabelled (142 safe
+   steps) gives AUROC 0.599 [0.530, 0.668]. That figure is a sensitivity analysis, not the confirmatory result.
