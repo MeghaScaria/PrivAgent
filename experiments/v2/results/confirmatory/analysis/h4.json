@@ -1,0 +1,77 @@
+{
+  "hypothesis": "H4",
+  "files": [
+    "pilot_ollama_qwen2.5-3b_benign_20261116T030329.jsonl",
+    "pilot_ollama_qwen2.5-3b_familyB_20261115T190527.jsonl"
+  ],
+  "config": "v2",
+  "steps_labelled": 397,
+  "steps_without_content": 0,
+  "unsafe_steps": 114,
+  "attack_tasks": 19,
+  "a": {
+    "recall_counts": {
+      "path": {
+        "k": 1,
+        "n": 62,
+        "rate": 0.016129032258064516,
+        "wilson95": [
+          0.002852867168621827,
+          0.08586720260689992
+        ]
+      },
+      "direct": {
+        "k": 52,
+        "n": 52,
+        "rate": 1.0,
+        "wilson95": [
+          0.9312077638761376,
+          1.0
+        ]
+      }
+    },
+    "bootstrap": {
+      "recall_path": {
+        "point": 0.016129032258064516,
+        "ci95": [
+          0.0,
+          0.05172413793103448
+        ],
+        "nan_replicates": 0
+      },
+      "recall_direct": {
+        "point": 1.0,
+        "ci95": [
+          1.0,
+          1.0
+        ],
+        "nan_replicates": 0
+      },
+      "diff_path_minus_direct": {
+        "point": -0.9838709677419355,
+        "ci95": [
+          -1.0,
+          -0.9482758620689655
+        ],
+        "nan_replicates": 0
+      }
+    },
+    "supported": true
+  },
+  "b": {
+    "auroc": 0.6537102473498233,
+    "ci95": [
+      0.6014692283949796,
+      0.705951266304667
+    ],
+    "se": 0.026654070874217176,
+    "positives": 114,
+    "negatives": 283,
+    "supported": false,
+    "ci_upper_at_most_0_6": false
+  },
+  "supported": {
+    "a": true,
+    "b": false
+  }
+}

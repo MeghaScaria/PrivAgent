@@ -1,0 +1,52 @@
+{
+  "hypothesis": "H2",
+  "file": "wp4_confirmatory.json",
+  "mode": "confirmatory",
+  "half": "confirmatory",
+  "roles": {
+    "shadow": "h2_shadow",
+    "score_r1on": "h2_score_r1on",
+    "score_r1off": "h2_score_r1off",
+    "handoff_enforce": "h2_score_r1off_enforce"
+  },
+  "attack_pairs": 40,
+  "attack_scenarios": 8,
+  "comparisons": {
+    "score_r1on": {
+      "pairs": 40,
+      "a_true": 14,
+      "b_true": 0,
+      "a_only": 14,
+      "b_only": 0,
+      "discordant": 14,
+      "p_two_sided": 0.0001220703125,
+      "reduces": true
+    },
+    "score_r1off": {
+      "pairs": 40,
+      "a_true": 14,
+      "b_true": 14,
+      "a_only": 0,
+      "b_only": 0,
+      "discordant": 0,
+      "p_two_sided": 1.0,
+      "reduces": false
+    }
+  },
+  "supported": true,
+  "cost_handoff_enforce_benign_halted_at_handoff": {
+    "k": 10,
+    "n": 70,
+    "rate": 0.14285714285714285,
+    "wilson95": [
+      0.07948941717066599,
+      0.2433841988366675
+    ]
+  },
+  "r3_fired_decisions": {
+    "h2_shadow": 0,
+    "h2_score_r1on": 0,
+    "h2_score_r1off": 0,
+    "h2_score_r1off_enforce": 0
+  }
+}

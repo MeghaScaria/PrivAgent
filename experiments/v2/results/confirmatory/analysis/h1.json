@@ -1,0 +1,549 @@
+{
+  "hypothesis": "H1",
+  "offline": {
+    "file": "precedence_ablation_confirmatory_runs.json",
+    "mode": "confirmatory",
+    "seeds": [
+      42,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9
+    ],
+    "sets": [
+      "test",
+      "holdout_types",
+      "holdout_variants"
+    ],
+    "downgrades": {
+      "first_fire_v1": {
+        "all": 463,
+        "ml_blocked_to_approval_external": 463,
+        "to_allowed": 0
+      },
+      "max_severity": {
+        "all": 0,
+        "ml_blocked_to_approval_external": 0,
+        "to_allowed": 0
+      },
+      "max_severity_reviewable": {
+        "all": 376,
+        "ml_blocked_to_approval_external": 376,
+        "to_allowed": 0
+      }
+    },
+    "costs": {
+      "test": {
+        "max_severity": {
+          "ext_hard_block": {
+            "point": 0.0,
+            "ci95": [
+              0.0,
+              0.0
+            ],
+            "runs": 3460
+          },
+          "approval": {
+            "point": 0.0,
+            "ci95": [
+              0.0,
+              0.0
+            ],
+            "runs": 3460
+          }
+        },
+        "max_severity_reviewable": {
+          "ext_hard_block": {
+            "point": 0.0,
+            "ci95": [
+              0.0,
+              0.0
+            ],
+            "runs": 3460
+          },
+          "approval": {
+            "point": 0.0,
+            "ci95": [
+              0.0,
+              0.0
+            ],
+            "runs": 3460
+          }
+        }
+      },
+      "holdout_types": {
+        "max_severity": {
+          "ext_hard_block": {
+            "point": 0.0,
+            "ci95": [
+              0.0,
+              0.0
+            ],
+            "runs": 3000
+          },
+          "approval": {
+            "point": 0.0,
+            "ci95": [
+              0.0,
+              0.0
+            ],
+            "runs": 3000
+          }
+        },
+        "max_severity_reviewable": {
+          "ext_hard_block": {
+            "point": 0.0,
+            "ci95": [
+              0.0,
+              0.0
+            ],
+            "runs": 3000
+          },
+          "approval": {
+            "point": 0.0,
+            "ci95": [
+              0.0,
+              0.0
+            ],
+            "runs": 3000
+          }
+        }
+      },
+      "holdout_variants": {
+        "max_severity": {
+          "ext_hard_block": {
+            "point": 0.0,
+            "ci95": [
+              0.0,
+              0.0
+            ],
+            "runs": 3000
+          },
+          "approval": {
+            "point": 0.0,
+            "ci95": [
+              0.0,
+              0.0
+            ],
+            "runs": 3000
+          }
+        },
+        "max_severity_reviewable": {
+          "ext_hard_block": {
+            "point": 0.0,
+            "ci95": [
+              0.0,
+              0.0
+            ],
+            "runs": 3000
+          },
+          "approval": {
+            "point": 0.0,
+            "ci95": [
+              0.0,
+              0.0
+            ],
+            "runs": 3000
+          }
+        }
+      }
+    },
+    "unsafe_steps_to_approval": {
+      "test": {
+        "first_fire_v1": {
+          "k": 1451,
+          "n": 5082,
+          "rate": 0.28551751279024007,
+          "wilson95": [
+            0.273265399544994,
+            0.298093633635427
+          ]
+        },
+        "max_severity": {
+          "k": 1229,
+          "n": 5082,
+          "rate": 0.24183392365210546,
+          "wilson95": [
+            0.2302591769826767,
+            0.2537986684601787
+          ]
+        },
+        "max_severity_reviewable": {
+          "k": 1410,
+          "n": 5082,
+          "rate": 0.27744982290436837,
+          "wilson95": [
+            0.2653114522694411,
+            0.28992438858106917
+          ]
+        }
+      },
+      "holdout_types": {
+        "first_fire_v1": {
+          "k": 1651,
+          "n": 6996,
+          "rate": 0.2359919954259577,
+          "wilson95": [
+            0.2261886091565713,
+            0.24608515279483867
+          ]
+        },
+        "max_severity": {
+          "k": 1651,
+          "n": 6996,
+          "rate": 0.2359919954259577,
+          "wilson95": [
+            0.2261886091565713,
+            0.24608515279483867
+          ]
+        },
+        "max_severity_reviewable": {
+          "k": 1651,
+          "n": 6996,
+          "rate": 0.2359919954259577,
+          "wilson95": [
+            0.2261886091565713,
+            0.24608515279483867
+          ]
+        }
+      },
+      "holdout_variants": {
+        "first_fire_v1": {
+          "k": 338,
+          "n": 5990,
+          "rate": 0.05642737896494157,
+          "wilson95": [
+            0.05086320200061136,
+            0.0625601281777706
+          ]
+        },
+        "max_severity": {
+          "k": 97,
+          "n": 5990,
+          "rate": 0.016193656093489148,
+          "wilson95": [
+            0.01329333738607375,
+            0.019714118713644313
+          ]
+        },
+        "max_severity_reviewable": {
+          "k": 292,
+          "n": 5990,
+          "rate": 0.04874791318864775,
+          "wilson95": [
+            0.04357788896761847,
+            0.05449635321234632
+          ]
+        }
+      }
+    }
+  },
+  "live": {
+    "file": "wp4_confirmatory.json",
+    "mode": "confirmatory",
+    "half": "confirmatory",
+    "arms": {
+      "first_fire_v1": "primary|first_fire_v1",
+      "max_severity": "primary|max_severity",
+      "max_severity_reviewable": "primary|max_severity_reviewable"
+    },
+    "downgrades": {
+      "first_fire_v1": {
+        "all": 70,
+        "ml_blocked_to_approval_external": 70,
+        "reviewable_relaxations": 0,
+        "to_allowed": 0,
+        "decisions": 500
+      },
+      "max_severity": {
+        "all": 0,
+        "ml_blocked_to_approval_external": 0,
+        "reviewable_relaxations": 0,
+        "to_allowed": 0,
+        "decisions": 500
+      },
+      "max_severity_reviewable": {
+        "all": 70,
+        "ml_blocked_to_approval_external": 70,
+        "reviewable_relaxations": 70,
+        "to_allowed": 0,
+        "decisions": 500
+      }
+    },
+    "costs": {
+      "accurate": {
+        "max_severity": {
+          "ext_hard_block": {
+            "point": 0.5714285714285714,
+            "ci95": [
+              0.2857142857142857,
+              0.7857142857142857
+            ],
+            "nan_replicates": 0,
+            "arm": {
+              "k": 10,
+              "n": 14,
+              "rate": 0.7142857142857143,
+              "wilson95": [
+                0.4535091567010681,
+                0.8827862135542308
+              ]
+            },
+            "first_fire_v1": {
+              "k": 2,
+              "n": 14,
+              "rate": 0.14285714285714285,
+              "wilson95": [
+                0.040093921271464966,
+                0.39941379496970353
+              ]
+            },
+            "scenarios": 14
+          },
+          "approval": {
+            "point": -0.5714285714285714,
+            "ci95": [
+              -0.7857142857142857,
+              -0.2857142857142857
+            ],
+            "nan_replicates": 0,
+            "arm": {
+              "k": 2,
+              "n": 14,
+              "rate": 0.14285714285714285,
+              "wilson95": [
+                0.040093921271464966,
+                0.39941379496970353
+              ]
+            },
+            "first_fire_v1": {
+              "k": 10,
+              "n": 14,
+              "rate": 0.7142857142857143,
+              "wilson95": [
+                0.4535091567010681,
+                0.8827862135542308
+              ]
+            },
+            "scenarios": 14
+          }
+        },
+        "max_severity_reviewable": {
+          "ext_hard_block": {
+            "point": 0.0,
+            "ci95": [
+              0.0,
+              0.0
+            ],
+            "nan_replicates": 0,
+            "arm": {
+              "k": 2,
+              "n": 14,
+              "rate": 0.14285714285714285,
+              "wilson95": [
+                0.040093921271464966,
+                0.39941379496970353
+              ]
+            },
+            "first_fire_v1": {
+              "k": 2,
+              "n": 14,
+              "rate": 0.14285714285714285,
+              "wilson95": [
+                0.040093921271464966,
+                0.39941379496970353
+              ]
+            },
+            "scenarios": 14
+          },
+          "approval": {
+            "point": 0.0,
+            "ci95": [
+              0.0,
+              0.0
+            ],
+            "nan_replicates": 0,
+            "arm": {
+              "k": 10,
+              "n": 14,
+              "rate": 0.7142857142857143,
+              "wilson95": [
+                0.4535091567010681,
+                0.8827862135542308
+              ]
+            },
+            "first_fire_v1": {
+              "k": 10,
+              "n": 14,
+              "rate": 0.7142857142857143,
+              "wilson95": [
+                0.4535091567010681,
+                0.8827862135542308
+              ]
+            },
+            "scenarios": 14
+          }
+        }
+      },
+      "all_conditions": {
+        "max_severity": {
+          "ext_hard_block": {
+            "point": 0.5714285714285714,
+            "ci95": [
+              0.2857142857142857,
+              0.7857142857142857
+            ],
+            "nan_replicates": 0,
+            "arm": {
+              "k": 50,
+              "n": 70,
+              "rate": 0.7142857142857143,
+              "wilson95": [
+                0.5994980341827975,
+                0.8067777962128025
+              ]
+            },
+            "first_fire_v1": {
+              "k": 10,
+              "n": 70,
+              "rate": 0.14285714285714285,
+              "wilson95": [
+                0.07948941717066599,
+                0.2433841988366675
+              ]
+            },
+            "scenarios": 14
+          },
+          "approval": {
+            "point": -0.5714285714285714,
+            "ci95": [
+              -0.7857142857142857,
+              -0.2857142857142857
+            ],
+            "nan_replicates": 0,
+            "arm": {
+              "k": 13,
+              "n": 70,
+              "rate": 0.18571428571428572,
+              "wilson95": [
+                0.11187300001902034,
+                0.29225578206743313
+              ]
+            },
+            "first_fire_v1": {
+              "k": 53,
+              "n": 70,
+              "rate": 0.7571428571428571,
+              "wilson95": [
+                0.6450496077036256,
+                0.8424813887710942
+              ]
+            },
+            "scenarios": 14
+          }
+        },
+        "max_severity_reviewable": {
+          "ext_hard_block": {
+            "point": 0.0,
+            "ci95": [
+              0.0,
+              0.0
+            ],
+            "nan_replicates": 0,
+            "arm": {
+              "k": 10,
+              "n": 70,
+              "rate": 0.14285714285714285,
+              "wilson95": [
+                0.07948941717066599,
+                0.2433841988366675
+              ]
+            },
+            "first_fire_v1": {
+              "k": 10,
+              "n": 70,
+              "rate": 0.14285714285714285,
+              "wilson95": [
+                0.07948941717066599,
+                0.2433841988366675
+              ]
+            },
+            "scenarios": 14
+          },
+          "approval": {
+            "point": 0.0,
+            "ci95": [
+              0.0,
+              0.0
+            ],
+            "nan_replicates": 0,
+            "arm": {
+              "k": 53,
+              "n": 70,
+              "rate": 0.7571428571428571,
+              "wilson95": [
+                0.6450496077036256,
+                0.8424813887710942
+              ]
+            },
+            "first_fire_v1": {
+              "k": 53,
+              "n": 70,
+              "rate": 0.7571428571428571,
+              "wilson95": [
+                0.6450496077036256,
+                0.8424813887710942
+              ]
+            },
+            "scenarios": 14
+          }
+        }
+      }
+    },
+    "attack_send_decisions_to_approval": {
+      "first_fire_v1": {
+        "k": 30,
+        "n": 40,
+        "rate": 0.75,
+        "wilson95": [
+          0.5980603857923197,
+          0.858128813609037
+        ]
+      },
+      "max_severity": {
+        "k": 0,
+        "n": 40,
+        "rate": 0.0,
+        "wilson95": [
+          0.0,
+          0.08762160119728664
+        ]
+      },
+      "max_severity_reviewable": {
+        "k": 30,
+        "n": 40,
+        "rate": 0.75,
+        "wilson95": [
+          0.5980603857923197,
+          0.858128813609037
+        ]
+      }
+    }
+  },
+  "test": {
+    "max_severity_downgrades_offline": 0,
+    "max_severity_downgrades_live": 0
+  },
+  "supported": true,
+  "arm_checks": {
+    "reviewable_downgrades_equal_relaxations_offline": true,
+    "reviewable_downgrades_to_allowed_offline": 0,
+    "reviewable_downgrades_equal_relaxations_live": true,
+    "reviewable_downgrades_to_allowed_live": 0
+  }
+}
