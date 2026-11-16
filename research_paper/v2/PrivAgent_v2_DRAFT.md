@@ -111,8 +111,8 @@ PrivAgent's Attack Lab instead replays seven scripted action patterns and does n
 
 ### 2.2 Runtime enforcement and information-flow control for agents
 
-- **CaMeL** [9] [VERIFY] separates trusted control flow from untrusted data and enforces capability policies.
-- **FIDES** [10] [VERIFY] enforces confidentiality and integrity labels in an agent planner.
+- **CaMeL** [9] [VERIFY: venue] separates trusted control flow from untrusted data and enforces capability policies.
+- **FIDES** [10] enforces confidentiality and integrity labels in an agent planner.
 - **Progent** [11] enforces programmable privilege policies on tool calls.
 - **IsolateGPT** [12] isolates LLM applications.
 
@@ -176,9 +176,9 @@ PrivAgent's evaluation is weaker in realism: no real LLM, synthetic trajectories
 - **Agent-Sentry** [15] bounds agents via execution provenance.
 - **Agent-BOM** [16] models agent systems as attributed graphs for auditing.
 - **PCAA** [17] attaches certificates and approval receipts to actions.
-- **CapAgent** [18] [VERIFY] maps human-attested intent to capability tokens. We could access only its bibliographic record and abstract.
+- **CapAgent** [18] maps human-attested intent to capability tokens. We could access only its bibliographic record and abstract.
 
-PrivAgent's label rule is a two-level instance of lattice-based flow labelling [19], within the provenance tradition [20]. Its maximum-over-inputs propagation over-labels, which is exactly the problem *Permissive Information-Flow Analysis* targets [21] [VERIFY]. Microsoft Research lists that paper as published in TMLR; OpenReview was not checked.
+PrivAgent's label rule is a two-level instance of lattice-based flow labelling [19], within the provenance tradition [20]. Its maximum-over-inputs propagation over-labels, which is exactly the problem *Permissive Information-Flow Analysis* targets [21] [VERIFY: venue]. Microsoft Research lists that paper as published in TMLR; OpenReview was not checked.
 
 ### 2.5 Human-in-the-loop
 
@@ -194,8 +194,8 @@ Table 2 summarises how PrivAgent is positioned relative to the closest systems.
 |---|---|---|---|---|---|
 | Wang et al. [13] | journal (2026) | deterministic rules | SI/DS labels, enforced | confirm treated as block | real LLMs, 30-task dataset |
 | AGATE [14] | preprint | deterministic gate | source registration, enforced | host approvals, grants | 3 harnesses |
-| CaMeL [9] [VERIFY] | preprint | capabilities | value provenance, enforced | not stated here | AgentDojo |
-| FIDES [10] [VERIFY] | preprint | IFC planner | labels, enforced | not stated here | AgentDojo |
+| CaMeL [9] [VERIFY: venue] | preprint | capabilities | value provenance, enforced | not stated here | AgentDojo |
+| FIDES [10] | preprint | IFC planner | labels, enforced | not stated here | AgentDojo |
 | PCAA [17] | preprint | certificates | not central | approval receipts | 96 traces |
 | **PrivAgent** | this draft | **learned trajectory score** plus rules | item provenance, **shadow**; handoffs not scored | opt-in pause, ledger | synthetic only |
 
@@ -205,7 +205,7 @@ Table 2 summarises how PrivAgent is positioned relative to the closest systems.
 
 *[Not yet written.]* Ledger rows to use:
 
-- (no ledger rows; LIT entries to be verified: Arp et al., TESSERACT, AgentLeak, GuardAgent, ShieldAgent, Kairos, Inspectra, and the updated CaMeL, FIDES, Permissive IFC, CapAgent entries)
+- (no ledger rows; LIT entries [29]–[35] and the updated [9], [10], [18], [21]. Checked 17 Nov 2026 against primary sources: [10], [18], [29]–[33] verified; [9] and [21] venue unconfirmed; [34] identity to confirm; [35] Inspectra not identified)
 
 ## 3. Problem Definition and Threat Model
 
@@ -1304,7 +1304,7 @@ Table 11 summarises the most consequential limitation in each category.
 
 1. **Decision precedence:** the invariant and conflict-resolution rules of Section 4.10, with separate logging of ML and policy decisions.
 2. **Scored handoffs:** live handoff events in the scored trajectory, then a re-evaluation of the flow features under a pre-set protocol.
-3. **Provenance enforcement:** enforced provenance with a measured false-positive cost, the declaration-condition experiment of Section 7.2, and influence-based label propagation [21] [VERIFY].
+3. **Provenance enforcement:** enforced provenance with a measured false-positive cost, the declaration-condition experiment of Section 7.2, and influence-based label propagation [21] [VERIFY: venue].
 4. **Real-LLM evaluation** on injection benchmarks [5], [6], extended to multi-agent handoffs, and a comparison with an enforcement-point design such as [13].
 5. **Approval binding:** recompute the destination, tool and server identity before sending; separate the approval keys; give RESTRICTED a real meaning.
 6. **Persistence:** context-bound encryption, rollback detection and recipient idempotency keys, then the pre-registered confirmatory persistence study.
@@ -1348,9 +1348,9 @@ Live cross-agent flow is not scored by the classifier, and policy precedence can
 
 [8] R. Geirhos, J.-H. Jacobsen, C. Michaelis, R. Zemel, W. Brendel, M. Bethge, and F. A. Wichmann, "Shortcut learning in deep neural networks," *Nat. Mach. Intell.*, vol. 2, no. 11, pp. 665–673, 2020.
 
-[9] E. Debenedetti, I. Shumailov, T. Fan, J. Hayes, N. Carlini, D. Fabian, C. Kern, C. Shi, A. Terzis, and F. Tramèr, "Defeating prompt injections by design," arXiv:2503.18813, 2025. Preprint; no venue found as of Nov. 10, 2026. **[VERIFY]**: details to be checked against the current publication record.
+[9] E. Debenedetti, I. Shumailov, T. Fan, J. Hayes, N. Carlini, D. Fabian, C. Kern, C. Shi, A. Terzis, and F. Tramèr, "Defeating prompt injections by design," arXiv:2503.18813, v2, Jun. 2025. Preprint (authors, title and versions checked 17 Nov 2026 at https://arxiv.org/abs/2503.18813). **[VERIFY: venue]** The first author's publication list gives the 4th IEEE Conference on Secure and Trustworthy Machine Learning (SaTML) 2026; this was not confirmed on a conference or proceedings page.
 
-[10] M. Costa, B. Köpf, A. Kolluri, A. Paverd, M. Russinovich, A. Salem, S. Tople, L. Wutschitz, and S. Zanella-Béguelin, "Securing AI agents with information-flow control," arXiv:2505.23643, 2025. Preprint; no venue found as of Nov. 10, 2026. **[VERIFY]**: details to be checked against the current publication record.
+[10] M. Costa, B. Köpf, A. Kolluri, A. Paverd, M. Russinovich, A. Salem, S. Tople, L. Wutschitz, and S. Zanella-Béguelin, "Securing AI agents with information-flow control," arXiv:2505.23643, v2, Sep. 2025. Preprint; the arXiv record lists no venue, and none was found (checked 17 Nov 2026 at https://arxiv.org/abs/2505.23643).
 
 [11] T. Shi, J. He, Z. Wang, H. Li, L. Wu, W. Guo, and D. Song, "Progent: Programmable privilege control for LLM agents," arXiv:2504.11703, 2025. Preprint; no venue found as of Nov. 10, 2026.
 
@@ -1366,13 +1366,13 @@ Live cross-agent flow is not scored by the classifier, and policy precedence can
 
 [17] Z. Wang, "Proof-carrying agent actions: Model-agnostic runtime governance for heterogeneous agent systems," arXiv:2606.04104, Jun. 2026. Preprint.
 
-[18] H. Hou, Y. Ma, and J. Miao, "CapAgent: Semantic data-flow governance for LLM agents in big-data cognitive computing," *Big Data and Cognitive Computing*, vol. 10, no. 9, art. 293, 2026, doi: 10.3390/bdcc10090293. Abstract and bibliographic record only. **[VERIFY]**: details to be checked against the current publication record.
+[18] H. Hou, Y. Ma, and J. Miao, "CapAgent: Semantic data-flow governance for LLM agents in big-data cognitive computing," *Big Data and Cognitive Computing*, vol. 10, no. 9, p. 293, Sep. 2026, doi: 10.3390/bdcc10090293. Abstract and bibliographic record only. (Crossref record checked 17 Nov 2026 at https://api.crossref.org/works/10.3390/bdcc10090293; the publisher page returned HTTP 403.)
 
 [19] D. E. Denning, "A lattice model of secure information flow," *Commun. ACM*, vol. 19, no. 5, pp. 236–243, 1976.
 
 [20] P. Buneman, S. Khanna, and W.-C. Tan, "Why and where: A characterization of data provenance," in *Proc. ICDT*, LNCS 1973, 2001, pp. 316–330.
 
-[21] S. A. Siddiqui, R. Gaonkar, B. Köpf, D. Krueger, A. Paverd, A. Salem, S. Tople, L. Wutschitz, M. Xia, and S. Zanella-Béguelin, "Permissive information-flow analysis for large language models," arXiv:2410.03055 (v3, 2026). Listed by Microsoft Research as published in *Transactions on Machine Learning Research*; OpenReview not checked. **[VERIFY]**: details to be checked against the current publication record.
+[21] S. A. Siddiqui, R. Gaonkar, B. Köpf, D. Krueger, A. Paverd, A. Salem, S. Tople, L. Wutschitz, M. Xia, and S. Zanella-Béguelin, "Permissive information-flow analysis for large language models," arXiv:2410.03055, v3, Jan. 2026 (authors, title and versions checked 17 Nov 2026 at https://arxiv.org/abs/2410.03055). **[VERIFY: venue]** Microsoft Research lists it as published in *Transactions on Machine Learning Research*, Oct. 2025, with OpenReview id ufYRO8y3mr (https://www.microsoft.com/en-us/research/publication/permissive-information-flow-analysis-for-large-language-models/); the OpenReview page itself could not be read (browser verification).
 
 [22] R. Parasuraman and V. Riley, "Humans and automation: Use, misuse, disuse, abuse," *Human Factors*, vol. 39, no. 2, pp. 230–253, 1997.
 
@@ -1388,19 +1388,19 @@ Live cross-agent flow is not scored by the classifier, and policy precedence can
 
 [28] R. G. Newcombe, "Interval estimation for the difference between independent proportions: Comparison of eleven methods," *Statistics in Medicine*, vol. 17, no. 8, pp. 873–890, 1998. **[VERIFY: not cited in the text]**
 
-[29] **[VERIFY]** Arp et al.: placeholder; bibliographic details to be added from the publication itself (not filled from memory). Not yet cited in the text.
+[29] D. Arp, E. Quiring, F. Pendlebury, A. Warnecke, F. Pierazzi, C. Wressnegger, L. Cavallaro, and K. Rieck, "Dos and don'ts of machine learning in computer security," in *Proc. 31st USENIX Security Symposium (USENIX Security 22)*, Boston, MA, Aug. 2022, pp. 3971–3988 (checked 17 Nov 2026 at https://www.usenix.org/conference/usenixsecurity22/presentation/arp). Not yet cited in the text.
 
-[30] **[VERIFY]** TESSERACT: placeholder; bibliographic details to be added from the publication itself (not filled from memory). Not yet cited in the text.
+[30] F. Pendlebury, F. Pierazzi, R. Jordaney, J. Kinder, and L. Cavallaro, "TESSERACT: Eliminating experimental bias in malware classification across space and time," in *Proc. 28th USENIX Security Symposium (USENIX Security 19)*, Santa Clara, CA, Aug. 2019, pp. 729–746 (checked 17 Nov 2026 at https://www.usenix.org/conference/usenixsecurity19/presentation/pendlebury). Not yet cited in the text.
 
-[31] **[VERIFY]** AgentLeak: placeholder; bibliographic details to be added from the publication itself (not filled from memory). Not yet cited in the text.
+[31] F. El Yagoubi, G. Badu-Marfo, and R. Al Mallah, "AgentLeak: A benchmark for internal-channel privacy leakage in multi-agent LLM systems," *IEEE Access*, vol. 14, pp. 94960–94978, 2026, doi: 10.1109/ACCESS.2026.3704541 (Crossref record checked 17 Nov 2026 at https://api.crossref.org/works/10.1109/ACCESS.2026.3704541; preprint arXiv:2602.11510, https://arxiv.org/abs/2602.11510, whose v1 had a different title). Not yet cited in the text.
 
-[32] **[VERIFY]** GuardAgent: placeholder; bibliographic details to be added from the publication itself (not filled from memory). Not yet cited in the text.
+[32] Z. Xiang, L. Zheng, Y. Li, J. Hong, Q. Li, H. Xie, J. Zhang, Z. Xiong, C. Xie, C. Yang, D. Song, and B. Li, "GuardAgent: Safeguard LLM agents via knowledge-enabled reasoning," in *Proc. 42nd International Conference on Machine Learning (ICML)*, PMLR, vol. 267, 2025, pp. 68316–68342 (checked 17 Nov 2026 at https://proceedings.mlr.press/v267/xiang25a.html). Not yet cited in the text.
 
-[33] **[VERIFY]** ShieldAgent: placeholder; bibliographic details to be added from the publication itself (not filled from memory). Not yet cited in the text.
+[33] Z. Chen, M. Kang, and B. Li, "ShieldAgent: Shielding agents via verifiable safety policy reasoning," in *Proc. 42nd International Conference on Machine Learning (ICML)*, PMLR, vol. 267, 2025, pp. 8313–8344 (checked 17 Nov 2026 at https://proceedings.mlr.press/v267/chen25ae.html). Not yet cited in the text.
 
-[34] **[VERIFY]** Kairos: placeholder; bibliographic details to be added from the publication itself (not filled from memory). Not yet cited in the text.
+[34] K. Hempel, N. Loose, L. Cavallaro, and T. Eisenbarth, "Kairos: Transactional security enforcement at the system boundary for LLM agents," arXiv:2610.18457, Oct. 2026. Preprint (checked 17 Nov 2026 at https://arxiv.org/abs/2610.18457). **[VERIFY: identity]** This is the only agent-security work named Kairos that the search found; confirm it is the intended one. Not yet cited in the text.
 
-[35] **[VERIFY]** Inspectra: placeholder; bibliographic details to be added from the publication itself (not filled from memory). Not yet cited in the text.
+[35] **[VERIFY]** Inspectra: not identified. The only match found is a platform described as a case study inside N. Noumi *et al.*, "Agentic security: A systematization of tools, failure modes, and design laws for LLM-driven penetration testing," arXiv:2608.21423 (https://arxiv.org/abs/2608.21423, checked 17 Nov 2026); not a standalone publication, so nothing was filled in. Not yet cited in the text.
 
 ---
 
