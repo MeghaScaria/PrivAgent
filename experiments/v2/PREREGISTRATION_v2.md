@@ -326,3 +326,12 @@ Pre-freeze commits `adc18b0`, `29b979c`, `984caf9` and `843d157` are the harness
 
 ## Amendments
 (none)
+
+- **Amendment 1, 17 Nov 2026 (after the confirmatory runs; editorial only).** The header and
+  status line at the top of this file ("DRAFT; finalise, then hash before any confirmatory run"
+  and "still unfrozen, no hash recorded") are stale. This pre-registration was frozen at
+  2026-11-15T13:25:37Z, commit `7727046`, before any confirmatory run. Its SHA-256 at freeze
+  (`846374a77d92b82e617be8ddd1ba8d60b2e898b9978d5d8351725f4076c705ac`) is recorded in
+  `experiments/v2/PREREGISTRATION_HASHES.md` (commit `6a59e1a`). "(none)" above was the state
+  of this section at the freeze. The frozen text above is left as it was; this amendment
+  changes no hypothesis, decision rule, sample size, exclusion or analysis.
