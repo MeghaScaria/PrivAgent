@@ -476,22 +476,22 @@ Every number in the main text cites a ledger row in an HTML comment. This table 
 
 | Manuscript section | Ledger rows cited |
 |---|---|
-| <!-- GENERATED from research_paper/v2/build/manuscript_src.md by build_manuscript.py; edit the source, not this file. --> | v1:#1, P1, S2, V1, C3, C4, C7, C8, C10, C11, C15, C24, C12, C13 |
-| I. INTRODUCTION | S1, P1, S2, V1, v1:#12, C20, C12, v1:#22, v1:#23, C3, C4, C5, C7, C8, S13, C10, C11, C24, X2, C13b |
+| Title and Abstract | v1:#1, P1, S2, V1, C3, C4, C7, C8, C10, C11, C15, C24, S8, C12, C13 |
+| I. INTRODUCTION | S1, P1, S2, V1, v1:#12, C20, C12, v1:#22, v1:#23, C3, C4, C2, C5, S4, C7, C8, S13, C10, C11, C24, X2, C13b |
 | II. RELATED WORK | v1:#40, S8, L1, S4, S5, S6, S7 |
 | III. THREAT MODEL | S2, S8, C22 |
-| IV. PRIVAGENT DESIGN | S1, v1:#20, v1:#9, v1:#19, S6, S13, S5, S8, S4, S14, S7, v1:#37, v1:#21, v1:#26, v1:#29, v1:#30, v1:#31 |
+| IV. PRIVAGENT DESIGN | S1, S4, S5, S6, S7, S14, v1:#20, v1:#9, v1:#19, S13, S8, v1:#37, v1:#21, v1:#26, v1:#29, v1:#30, v1:#31 |
 | V. STUDY DESIGN | S7, S8, S10, C21, S2, P1, V1, v1:#18, v1:#19, S4, S5, S9, S11, S3, S12, P4, P3, P2, P5 |
 | VI. RESULTS | v1:#1, v1:#2, v1:#9, v1:#11, v1:#3, v1:#4, v1:#5, v1:#6, v1:#12, v1:#17, v1:#22, v1:#23, v1:#27, v1:#34, C3, C1, C2, C5, C4, C4b, C7, C8, S7, C9, C10, C11, C14, C12, C13, C13b, C16, C17, C15, C24, S8, C18, C18b, C18c, C19, S10, C20, V1, X1, X2, X4, X3 |
-| VII. DISCUSSION | C15, C24, C12, C20, C10, C7, C8, S13, C2, C3, C4, C5, X2, v1:#34, D12, C11, C13, C13b, X3 |
+| VII. DISCUSSION | C15, C24, C12, C20, C10, C7, C8, S13, C2, C3, C4, C5, S4, X2, v1:#34, D12, C11, C13, C13b, X3 |
 | VIII. LIMITATIONS AND THREATS TO VALIDITY | S10, S8, C21, C22, S7, X2, S3, C14, S2, C13b, v1:#16, V1, v1:#37, v1:#42 |
-| IX. CONCLUSION | C24, C12, C10, C11, C7, C8, C4, C5, C15, C13 |
+| IX. CONCLUSION | C24, C12, C10, C11, C7, C8, C4, C5, C15, S8, C13 |
 
 ## S12. Reference verification
 
 | Reference | Checked against (17 Nov 2026 unless stated) | Status |
 |---|---|---|
-| CaMeL | https://arxiv.org/abs/2503.18813 | arXiv record verified; venue **[VERIFY]**: the first author's publication list gives IEEE SaTML 2026, not confirmed on a conference page |
+| CaMeL | https://arxiv.org/abs/2503.18813; https://www.computer.org/csdl/proceedings-article/satml/2026/785900a587/2jZks3ksGT6 | arXiv record verified. Venue: Proc. IEEE SaTML 2026, verified by the author in a browser on 17 Nov 2026 (the CSDL page does not render for automated fetching). Pages **[VERIFY]** |
 | FIDES | https://neurips.cc/virtual/2026/poster/152696; https://arxiv.org/abs/2505.23643 | NeurIPS 2026 (title and authors as on the conference page); page numbers not available |
 | Permissive IFC | https://arxiv.org/abs/2410.03055; https://www.microsoft.com/en-us/research/publication/permissive-information-flow-analysis-for-large-language-models/ | TMLR, Oct. 2025, as listed by Microsoft Research (per the authors' instruction); the OpenReview page (id ufYRO8y3mr) could not be read |
 | CapAgent | https://api.crossref.org/works/10.3390/bdcc10090293 | verified (Crossref); publisher page returned HTTP 403 |
@@ -503,6 +503,7 @@ Every number in the main text cites a ledger row in an HTML comment. This table 
 | Kairos | https://arxiv.org/abs/2610.18457 | verified; identity confirmed by the authors |
 | Noumi et al. (Inspectra) | https://arxiv.org/abs/2608.21423 | verified (title, authors, submission date; the abstract names Inspectra as the authors' platform) |
 | McNemar | https://api.crossref.org/works?query.bibliographic=McNemar... (DOI 10.1007/BF02295996) | verified (Crossref) |
+| Claude Code (AI system, cited in Sections I–IX) | https://code.claude.com/docs/en/overview | page title and product name verified |
 | DeLong et al. | Crossref (DOI 10.2307/2531595) | verified except the end page (Crossref gives the first page only) **[VERIFY]** |
 | All other references | carried from the v1 paper, whose ledger records them as LIT (v1 ledger rows 40, 41) | not re-checked in this pass |
 

@@ -21,7 +21,7 @@ numbered sections (I, II, ... with A, B, ... subsections), back matter, referenc
 **Abstract**
 
 <!-- DRAFT: author to review -->
-Multi-agent large language model (LLM) pipelines can leak sensitive data through a chain of tool calls and agent-to-agent handoffs in which no single step looks unsafe. We ask which runtime control actually stops such a leak: a learned trajectory classifier, deterministic policy rules, provenance-derived sensitivity or a human reviewer. Using PrivAgent, an inspectable four-agent governance prototype, we report two phases. An exploratory phase on synthetic trajectories showed that near-perfect detection (F1 0.999) came from evaluation leakage and a positional shortcut. <!-- v1:#1 --> A pre-registered phase, frozen before any confirmatory run, then tested five hypotheses using canary tokens as ground truth and an independent recomputation. <!-- P1 --> <!-- S2 --> <!-- V1 --> Escalation-only precedence removed every downgrade of a model block, at a measured cost to benign sends. <!-- C3 --> <!-- C4 --> Scoring handoffs cut attack sends only through a rule that counts one sensitive read several times. <!-- C7 --> <!-- C8 --> Enforced provenance stopped all misreported attack sends but completed fewer benign sends. <!-- C10 --> <!-- C11 --> With a 3B-parameter local model and a scripted compromised writer, the full configuration let no attack through (0 of 55), against 16 of 57 for the earlier design. Most of its stops were sent to human review rather than blocked. <!-- C15 --> <!-- C24 --> The classifier flagged 1 of 62 cross-agent handoffs, and a position-only baseline did not meet its pre-registered bound. <!-- C12 --> <!-- C13 --> The results come from synthetic data, deterministic scripted scenarios, simulated reviewers and one small model.
+Multi-agent large language model pipelines can leak sensitive data through a chain of tool calls and agent-to-agent handoffs in which no single step looks unsafe. We ask which runtime control actually stops such a leak: a learned trajectory classifier, deterministic policy rules, provenance-derived sensitivity or a human reviewer. Using PrivAgent, an inspectable four-agent governance prototype, we report two phases. An exploratory phase on synthetic trajectories showed that a near-perfect F1 score of 0.999 came from evaluation leakage and a positional shortcut. <!-- v1:#1 --> A pre-registered phase, frozen before any confirmatory run, then tested five hypotheses using canary tokens as ground truth and an independent recomputation. <!-- P1 --> <!-- S2 --> <!-- V1 --> Escalation-only precedence removed every downgrade of a model block, at a measured cost to benign sends. <!-- C3 --> <!-- C4 --> Scoring handoffs cut attack sends only through a rule that counts one sensitive read several times. <!-- C7 --> <!-- C8 --> Enforced provenance stopped all misreported attack sends but completed fewer benign sends. <!-- C10 --> <!-- C11 --> With a 3B-parameter local model and a scripted compromised writer, the full configuration let no attack through (0 of 55), but only because the sends it held for human review were never executed. With a simulated reviewer approving attack sends with probability 0.5, it let 17 of 53 attacks through, comparable to the earlier design (16 of 57) and to rules alone (18 of 56). <!-- C15 --> <!-- C24 --> <!-- S8 --> The classifier flagged 1 of 62 cross-agent handoffs, and a position-only baseline did not meet its pre-registered bound. <!-- C12 --> <!-- C13 --> The results come from synthetic data, scripted scenarios, simulated reviewers and one small model.
 
 <!-- TEMPLATE: \begin{IEEEkeywords} -->
 **Index Terms:** Evaluation methodology, human-in-the-loop, information-flow control, large language model agents, multi-agent systems, pre-registration, runtime governance, shortcut learning.
@@ -31,19 +31,21 @@ Multi-agent large language model (LLM) pipelines can leak sensitive data through
 ## I. INTRODUCTION
 
 <!-- DRAFT: author to review -->
-Tool-using LLM agents retrieve documents, query databases and send messages. Frameworks such as LangGraph compose specialised agents into stateful graphs [@langgraph], and the Model Context Protocol (MCP) standardises tool access [@mcp_anthropic], [@mcp_spec]. Indirect prompt injection showed that content an agent retrieves can redirect what it does [@greshake], and benchmarks measure how often tool agents follow injected instructions [@injecagent], [@agentdojo]. In a multi-agent pipeline a disclosure is often compositional: one agent reads sensitive records, a second summarises them and a third transmits the summary. Each step can look legitimate on its own, and the transmitting agent may misreport whether its output is sensitive.
+Tool-using large language model (LLM) agents retrieve documents, query databases and send messages. Frameworks such as LangGraph compose specialised agents into stateful graphs [@langgraph], and the Model Context Protocol (MCP) standardises tool access [@mcp_anthropic], [@mcp_spec]. Indirect prompt injection showed that content an agent retrieves can redirect what it does [@greshake], and benchmarks measure how often tool agents follow injected instructions [@injecagent], [@agentdojo]. In a multi-agent pipeline a disclosure is often compositional: one agent reads sensitive records, a second summarises them and a third transmits the summary. Each step can look legitimate on its own, and the transmitting agent may misreport whether its output is sensitive.
 
 Runtime governance for such pipelines combines several kinds of control: learned risk scores, deterministic rules, data provenance and human review. Prior systems combine these controls in different ways and emphasise different ones [@camel], [@fides], [@wangpep], [@guardagent], [@shieldagent], [@kairos]. This paper asks a narrower, empirical question: *when a leak is stopped, which control stopped it, and what did that cost?* We answer it with PrivAgent, an inspectable governance prototype for a four-agent LangGraph pipeline. <!-- S1 --> The evaluation has two phases. Phase 1 was exploratory; its findings motivated the design changes and hypotheses of Phase 2. Phase 2 was pre-registered and frozen before any confirmatory run, used canary tokens as ground truth, and was independently recomputed. <!-- P1 --> <!-- S2 --> <!-- V1 -->
 
 We make five contributions:
 
 1. **Shortcut removal costs compositional generalisation, on synthetic data and on real traces.** Removing a positional shortcut coincided with the loss of most detection of a held-out path-dependent attack (runs caught 0.84 before, 0.06 after). <!-- v1:#12 --> Over ten seeds, the three path-dependent attack types are caught in 0.023–0.036 of runs, against at least 0.995 for every other type. <!-- C20 --> On real LLM traces the frozen classifier flagged 1 of 62 path-dependent handoffs and 52 of 52 direct sends. <!-- C12 -->
-2. **Hybrid governance is non-monotonic, and the precedence choice sets the security–utility trade-off.** In the earlier design a rule meant to add oversight could turn a model block into an approvable request. <!-- v1:#22 --> <!-- v1:#23 --> Escalation-only precedence removed every such downgrade (Section VI-B). <!-- C3 --> But it hard-blocked benign sends in 10 of 14 benign runs, against 2 of 14 before. <!-- C4 --> A reviewable variant restored that utility by sending model blocks to review. <!-- C5 -->
+2. **Hybrid governance is non-monotonic, and the precedence choice sets the security–utility trade-off.** In the earlier design a rule meant to add oversight could turn a model block into an approvable request. <!-- v1:#22 --> <!-- v1:#23 --> Escalation-only precedence removed every such downgrade (Section VI-B). <!-- C3 --> But it hard-blocked benign sends in 10 of 14 benign runs, against 2 of 14 before. <!-- C4 --> A reviewable variant sends a model-only block on an external action to review. In the live tests it gave the same downgrades (70) and the same costs as `first_fire_v1`. <!-- C2 --> <!-- C5 --> Its one difference, that it never relaxes a rule's BLOCKED, did not change any outcome in these scenarios. <!-- S4 --> <!-- C2 --> <!-- C5 -->
 3. **The monitor is blind to multi-agent flow at runtime, and scoring handoffs helped only through rule R1's double counting.** Scoring the two handoffs reduced attack sends from 14 of 40 to 0 only when rule R1 counted the scored handoffs; without that, sends stayed at 14 of 40. <!-- C7 --> <!-- C8 --> In development runs we traced the reduction to R1 counting one sensitive read up to three times. <!-- S13 -->
 4. **Enforced provenance defeats misreporting at a measured over-tainting cost, and the residual risk rests on the reviewer.** It reduced misreported attack sends from 12 of 16 to 0 of 16, and benign sends completed under the same misreports from 10 of 12 to 2 of 12. <!-- C10 --> <!-- C11 --> In the full configuration, 44 of the 52 stopped canary-carrying sends went to human review. <!-- C24 --> If a reviewer approved them at chance, the expected attack success would be 0.40 (exploratory). <!-- X2 -->
 5. **A reusable evaluation method.** It consists of a pre-registration frozen before any confirmatory run, canary-token ground truth that involves no detector, and an independent recomputation by an agent that had not read the analysis code. <!-- P1 --> <!-- S2 --> <!-- V1 --> The recomputation matched 44 of 53 items. It also exposed one undefined label, on which a pre-registered outcome depends. <!-- V1 --> <!-- C13b -->
 
 We do not claim that any of the mechanisms is new, that PrivAgent outperforms the systems in Section II, or that the results hold for production deployments, larger models or human reviewers (Section VIII).
+
+*Text in this section was drafted with AI assistance [@claude]; see the Acknowledgment.*
 
 ## II. RELATED WORK
 
@@ -53,7 +55,7 @@ Indirect prompt injection [@greshake] is the core threat for tool agents. InjecA
 
 ### B. Runtime Enforcement and Information-Flow Control for Agents
 
-CaMeL [@camel] separates trusted control flow from untrusted data and enforces capability policies. FIDES [@fides] enforces confidentiality and integrity labels in an agent planner. Progent [@progent] enforces programmable privilege policies on tool calls, and IsolateGPT [@isolategpt] isolates LLM applications. Permissive information-flow analysis [@permissive] targets the over-labelling that maximum-over-inputs propagation causes, which is the source of the over-tainting cost we measure in Section VI-B. GuardAgent [@guardagent] and ShieldAgent [@shieldagent] place a guard agent over a protected agent. Kairos [@kairos] enforces security at the system boundary of an unmodified agent. <!-- DRAFT: author to review (GuardAgent, ShieldAgent, Kairos sentences) --> These systems enforce deterministic or reasoned guarantees. PrivAgent's core decision is instead a learned score combined with rules, which is what makes precedence a design question.
+Information-flow control (IFC) tracks labels on data as it moves through a computation. CaMeL [@camel] separates trusted control flow from untrusted data and enforces capability policies. FIDES [@fides] enforces confidentiality and integrity labels in an agent planner. Progent [@progent] enforces programmable privilege policies on tool calls, and IsolateGPT [@isolategpt] isolates LLM applications. Permissive information-flow analysis [@permissive] targets the over-labelling that maximum-over-inputs propagation causes, which is the source of the over-tainting cost we measure in Section VI-B. GuardAgent [@guardagent] and ShieldAgent [@shieldagent] place a guard agent over a protected agent. Kairos [@kairos] enforces security at the system boundary of an unmodified agent. <!-- DRAFT: author to review (GuardAgent, ShieldAgent, Kairos sentences) --> These systems enforce deterministic or reasoned guarantees. PrivAgent's core decision is instead a learned score combined with rules, which is what makes precedence a design question.
 
 Closest to PrivAgent's tool-call governance is the single-agent policy enforcement point (PEP) of Wang et al. [@wangpep]. It intercepts every tool call, evaluates five ordered rules, propagates source-integrity and data-sensitivity labels across steps and writes a hash-chained audit log. In 1,050 LLM-driven runs it reduced attack success from 40.0% to 5.0%. <!-- v1:#40 --> Our `rules_only` configuration is a deterministic PEP baseline in the style of that work, not a reimplementation of it. <!-- S8 --> The two evaluations measure different things, and we make no claim that PrivAgent outperforms it.
 
@@ -71,21 +73,25 @@ Leakage [@kapoor] and shortcut learning [@geirhos] are known to inflate machine-
 |---|---|---|---|---|---|
 | Wang et al. [@wangpep] | journal | deterministic rules | labels, enforced | confirm treated as block | real LLMs, 30-task dataset |
 | AGATE [@agate] | preprint | deterministic gate | source registration, enforced | host approvals, grants | 3 harnesses |
-| CaMeL [@camel] | preprint [VERIFY: venue] | capabilities | value provenance, enforced | not stated here | AgentDojo |
+| CaMeL [@camel] | SaTML 2026 | capabilities | value provenance, enforced | not stated here | AgentDojo |
 | FIDES [@fides] | NeurIPS 2026 | IFC planner | labels, enforced | not stated here | AgentDojo |
 | **PrivAgent (this work)** | – | learned score + rules, escalation-only precedence | item provenance, enforced; handoffs scored | opt-in pause, ledger, bound approval | synthetic; scripted graph scenarios; one 3B local LLM |
 
 <!-- TABLE I: L1; v1:#40; PrivAgent row: S4, S5, S6, S7, S8 -->
 
+*Text in this section was drafted with AI assistance [@claude]; see the Acknowledgment.*
+
 ## III. THREAT MODEL
 
-**Actions and runs.** An action is the tuple $a = (\mathrm{agent\_role},\ \mathrm{tool\_name},\ \mathrm{action\_type},\ \mathrm{data\_sensitivity},\ \mathrm{destination\_category})$, and a run is the ordered list of actions in one task. Sensitive data comes from HR and finance documents, the `employees` and `transactions` tables, and user input in which a regular-expression detector finds personal data; content of unknown origin is treated as sensitive.
+**Actions and runs.** An action is the tuple $a = (\mathrm{agent\_role},\ \mathrm{tool\_name},\ \mathrm{action\_type},\ \mathrm{data\_sensitivity},\ \mathrm{destination\_category})$, and a run is the ordered list of actions in one task. Sensitive data comes from human-resources (HR) and finance documents, the `employees` and `transactions` tables, and user input in which a regular-expression detector finds personal data; content of unknown origin is treated as sensitive.
 
 **Leak.** An unauthorised disclosure is an external `send_result` call carrying sensitive data the task owner did not intend to send. In Phase 2 it is measured by canary tokens: every sensitive record carries a unique token, and an attack succeeds iff at least one token reaches the external server. <!-- S2 -->
 
 **Adversary.** We consider compromised or manipulated agent steps, an agent that misreports the sensitivity of its output, multi-step flows that move data across agent boundaries and, for the approval workflow, state tampering, replays and duplicate resumes. Phase 2 operationalises compromise as a scripted writer agent that always tries to exfiltrate its full context (family B). <!-- S8 -->
 
 **Trusted and out of scope.** The governance code, the MCP client and servers and the host are trusted. Out of scope are semantic exfiltration that the features cannot represent, attacks across runs, process compromise and a holder of the master key. Indirect prompt injection against a real LLM (family A) was registered but not run. <!-- C22 --> PrivAgent provides no guarantee of complete security, exactly-once delivery or universal attack prevention.
+
+*Text in this section was drafted with AI assistance [@claude]; see the Acknowledgment.*
 
 ## IV. PRIVAGENT DESIGN
 
@@ -94,7 +100,7 @@ Leakage [@kapoor] and shortcut learning [@geirhos] are known to inflate machine-
 PrivAgent governs a four-agent LangGraph pipeline (orchestrator, retriever, analyst, writer) that reaches its tools through four FastMCP stdio servers (document, database, web, external). <!-- S1 --> The orchestrator plans. The retriever calls governed read tools. The analyst synthesises and self-reports whether its output contains sensitive data. The writer composes the answer and may call `send_result`. A single interception point, `TrajectoryMonitor.evaluate()`, scores every proposed tool call before execution. It extracts features from the run's executed prefix, maps the classifier's score to a decision, applies the policy rules and the precedence mode, logs the decision, and appends the action to the trajectory only if it is allowed. Fig. 1 shows the architecture.
 
 <!-- TEMPLATE: figure -->
-**Fig. 1.** *[Placeholder: v2 architecture figure to be redrawn. The v1 figure (`research_paper/final/figures/r01_architecture_three_tiers.png`) shows provenance and handoffs in shadow mode, which no longer describes the primary configuration.]*
+![Fig. 1. PrivAgent v2 architecture. Every proposed tool call and each scored handoff passes the single interception point before execution. The classifier scores features of the executed prefix; rules R1–R3 and the precedence mode combine with the model decision; enforced provenance supplies the sensitivity label. Allowed calls reach the MCP servers, HUMAN_APPROVAL sends wait at the approval gate, and every decision is appended to the hash-chained audit log.](figures/v2_f0_architecture.png) <!-- S1 --> <!-- S4 --> <!-- S5 --> <!-- S6 --> <!-- S7 --> <!-- S14 -->
 
 ### B. Classifier, Decisions and Rules
 
@@ -120,7 +126,7 @@ The two data-carrying handoffs of a run (retriever → analyst and analyst → w
 
 ### E. Approval Workflow, Binding and Audit
 
-In the opt-in approval graph, the writer's external send passes a gate. A send rated HUMAN_APPROVAL is paused for review, and an approval executes it. A SQLite execution ledger allows at most one execution attempt per action identifier. It does not provide exactly-once delivery: after a crash at or after the claim, whether delivery happened is not recorded. <!-- v1:#37 --> The approval digest binds the tool, the destination, the MCP server identity and a digest of the payload. It is recomputed immediately before execution, and the send is refused on any mismatch. <!-- S6 --> The approval-signing and checkpoint-encryption keys are derived from one master key with HKDF-SHA256 under distinct labels. <!-- S6 --> Decisions are written to an append-only, hash-chained audit log that can be verified line by line. <!-- S6 --> <!-- S14 -->
+In the opt-in approval graph, the writer's external send passes a gate. A send rated HUMAN_APPROVAL is paused for review, and an approval executes it. A SQLite execution ledger allows at most one execution attempt per action identifier. It does not provide exactly-once delivery: after a crash at or after the claim, whether delivery happened is not recorded. <!-- v1:#37 --> The approval digest binds the tool, the destination, the MCP server identity and a digest of the payload. It is recomputed immediately before execution, and the send is refused on any mismatch. <!-- S6 --> The approval-signing and checkpoint-encryption keys are derived from one master key under distinct labels, with the HMAC-based key derivation function (HKDF) over the Secure Hash Algorithm SHA-256; HMAC is the hash-based message authentication code. <!-- S6 --> Decisions are written to an append-only, hash-chained audit log that can be verified line by line. <!-- S6 --> <!-- S14 -->
 
 ### F. The Configurations Compared
 
@@ -141,6 +147,8 @@ TABLE II lists what changed from the earlier design (`v1`) to the primary config
 
 <!-- TABLE II rows: S4, S5, S6, S7, S14; v1 column: v1:#21, v1:#26, v1:#29, v1:#30, v1:#31 -->
 
+*Text in this section was drafted with AI assistance [@claude]; see the Acknowledgment.*
+
 ## V. STUDY DESIGN
 
 **TABLE III. The two phases.**
@@ -157,7 +165,7 @@ TABLE II lists what changed from the earlier design (`v1`) to the primary config
 
 ### A. Phase 1: Exploratory Evaluation
 
-Phase 1 evaluated the classifier offline on synthetic, template-generated trajectories. Three attack types were held out, alongside a held-out set of tool-swapped variants (variant B). <!-- S10 --> <!-- v1:#18 --> Runs were split 60/20/20 by run, and thresholds were tuned on validation data only. <!-- v1:#18 --> <!-- v1:#19 --> Metrics are reported at step level (precision, recall, F1 and AUROC at the stop threshold) and at run level ("runs caught": attack runs with at least one unsafe step stopped). Only run-level proportions carry Wilson intervals [@wilson], because steps within a run are dependent. The model and feature choices followed selection rules fixed before test data was examined. Phase 1 also ran scripted demonstrations of provenance against the real MCP servers, and a human-approval evaluation with simulated reviewers. Its results motivated the design changes of Section IV and the hypotheses of Phase 2; they are exploratory. Its full tables are in the Supplementary Material.
+Phase 1 evaluated the classifier offline on synthetic, template-generated trajectories. Three attack types were held out, alongside a held-out set of tool-swapped variants (variant B). <!-- S10 --> <!-- v1:#18 --> Runs were split 60/20/20 by run, and thresholds were tuned on validation data only. <!-- v1:#18 --> <!-- v1:#19 --> Metrics are reported at step level (precision, recall and F1 at the stop threshold, and the area under the receiver operating characteristic curve, AUROC) and at run level ("runs caught": attack runs with at least one unsafe step stopped). Only run-level proportions carry Wilson intervals [@wilson], because steps within a run are dependent. The model and feature choices followed selection rules fixed before test data was examined. Phase 1 also ran scripted demonstrations of provenance against the real MCP servers, and a human-approval evaluation with simulated reviewers. Its results motivated the design changes of Section IV and the hypotheses of Phase 2; they are exploratory. Its full tables are in the Supplementary Material.
 
 ### B. Phase 2: Hypotheses
 
@@ -173,6 +181,9 @@ Phase 1 evaluated the classifier offline on synthetic, template-generated trajec
 
 <!-- TABLE IV: S4, S5, S7, S9, S10, S11, S8 -->
 
+*CI: 95% confidence interval (Section V-D). WP4 and WP6 are the graph-scenario and real-LLM work packages (Section V-C).*
+
+
 Measured costs (benign sends hard-blocked, approval volume, benign halts and benign utility) were registered without thresholds. <!-- S9 -->
 
 ### C. Phase 2: Scenarios, Real-LLM Pilot and Ground Truth
@@ -185,15 +196,17 @@ Measured costs (benign sends hard-blocked, approval volume, benign halts and ben
 
 ### D. Statistics, Exclusions and Freeze
 
-Confidence intervals are percentile bootstrap intervals with 10,000 resamples and seed 20261115. H4(a) and H5 resample tasks, and the WP4 costs resample scenarios. Paired comparisons use the exact two-sided McNemar test [@mcnemar], with the reduction also required in the predicted direction. Rates carry Wilson 95% intervals, and AUROC a DeLong 95% interval [@delong]. <!-- S9 --> Only infrastructure failures are excluded. A failure caused by model output is a model failure. No agent code was changed during the study. <!-- S12 -->
+Confidence intervals (CIs) are percentile bootstrap intervals with 10,000 resamples and seed 20261115. H4(a) and H5 resample tasks, and the WP4 costs resample scenarios. Paired comparisons use the exact two-sided McNemar test [@mcnemar], with the reduction also required in the predicted direction. Rates carry Wilson 95% intervals, and AUROC a DeLong 95% interval [@delong]. <!-- S9 --> Only infrastructure failures are excluded. A failure caused by model output is a model failure. No agent code was changed during the study. <!-- S12 -->
 
 The pre-registration was frozen at 2026-11-15T13:25:37Z and its SHA-256 recorded. <!-- P1 --> It names the four commits holding the harness, runners and analysis code, and five analysis choices fixed in that code. <!-- P4 --> No code changed after the freeze. <!-- P3 --> One editorial amendment records that its header's "draft" wording is stale. <!-- P2 --> The confirmatory steps ran in a fixed order, and none failed or was rerun. <!-- P5 --> Afterwards, a separate agent recomputed the outcomes from the raw result files and the pre-registration alone. It had not read the analysis code, it fixed its tolerance before comparing (bootstrap bounds within ±0.02 with the same decision; everything else exact), and it saved its results before opening the report. <!-- V1 -->
+
+*Text in this section was drafted with AI assistance [@claude]; see the Acknowledgment.*
 
 ## VI. RESULTS
 
 ### A. Phase 1: Exploratory Findings
 
-**Leakage and a positional shortcut.** The original generator assigned trajectory identifiers per row, so steps of one run fell into both training and test. The reported F1 of 0.999 was an artefact of that leakage. <!-- v1:#1 --> With run-level splits, F1 on held-out attack types fell to 0.657. <!-- v1:#2 --> That model then relied on where an attack occurred. A classifier given only position features reached validation AUROC 0.951. Recall fell from 0.84 for the shortest prefixes to 0.00 for the longest (Fig. 2). <!-- v1:#9 --> A randomised generator and features chosen by a pre-set rule (validation AUPRC 0.970, against 0.896 for action-only features) removed the shortcut. <!-- v1:#11 --> Unsafe-step scores did not change when neutral steps were inserted (score range 0.000), and recall stayed between 0.89 and 1.00 across positions. <!-- v1:#9 --> TABLE V gives the stages; the sets differ between stages and are not comparable across them (Fig. 3).
+**Leakage and a positional shortcut.** The original generator assigned trajectory identifiers per row, so steps of one run fell into both training and test. The reported F1 of 0.999 was an artefact of that leakage. <!-- v1:#1 --> With run-level splits, F1 on held-out attack types fell to 0.657. <!-- v1:#2 --> That model then relied on where an attack occurred. A classifier given only position features reached validation AUROC 0.951. Recall fell from 0.84 for the shortest prefixes to 0.00 for the longest (Fig. 2). <!-- v1:#9 --> A randomised generator and features chosen by a pre-set rule (validation area under the precision–recall curve, AUPRC, 0.970, against 0.896 for action-only features) removed the shortcut. <!-- v1:#11 --> Unsafe-step scores did not change when neutral steps were inserted (score range 0.000), and recall stayed between 0.89 and 1.00 across positions. <!-- v1:#9 --> TABLE V gives the stages; the sets differ between stages and are not comparable across them (Fig. 3).
 
 ![Fig. 2. Positional shortcut and its removal.](../final/figures/r03_position_shortcut.png)
 
@@ -211,7 +224,7 @@ The pre-registration was frozen at 2026-11-15T13:25:37Z and its SHA-256 recorded
 
 ![Fig. 3. F1 by stage and set (Phase 1). Gray: in-distribution test sets; blue: held-out sets.](../final/figures/r05_evaluation_correction.png)
 
-**Generalisation trade-off.** The deployed model caught every run of two held-out direct attack types, but only 6 of 107 runs of the held-out path-dependent `path_cross_agent_leak` (step recall 0.019). <!-- v1:#5 --> <!-- v1:#6 --> The earlier model, before the shortcut was removed, caught 0.84 of those runs; held-out F1 went from 0.763 to 0.665 and variant F1 from 0.667 to 0.493. <!-- v1:#12 --> Four flow-count features improved path attacks but hurt direct ones. Their mean gains (0.015, SE 0.026; 0.024, SE 0.027) failed the pre-set rule, and they were not adopted. <!-- v1:#17 --> <!-- v1:#3 -->
+**Generalisation trade-off.** The deployed model caught every run of two held-out direct attack types, but only 6 of 107 runs of the held-out path-dependent `path_cross_agent_leak` (step recall 0.019). <!-- v1:#5 --> <!-- v1:#6 --> The earlier model, before the shortcut was removed, caught 0.84 of those runs; held-out F1 went from 0.763 to 0.665 and variant F1 from 0.667 to 0.493. <!-- v1:#12 --> Four flow-count features improved path attacks but hurt direct ones. Their mean gains (0.015, standard error, SE, 0.026; 0.024, SE 0.027) failed the pre-set rule, and they were not adopted. <!-- v1:#17 --> <!-- v1:#3 -->
 
 **Precedence, provenance and approval.** Code inspection and stored runs showed that under first-fire precedence, rule R2 turned model BLOCKED decisions (scores 0.995–0.999) into approvable requests. <!-- v1:#22 --> <!-- v1:#23 --> In two stored demonstration runs an under-reporting analyst produced an enforced score of 0.0 where the provenance-derived shadow score was 0.9952. The send was escalated for review, approved and executed. <!-- v1:#27 --> In eight scripted approval scenarios, an accurate simulated reviewer let 0 of 4 attack transmissions through. An approve-everything reviewer let 3 of 4 through, more than the 2 of 4 without approval. <!-- v1:#34 --> These findings motivated escalation-only precedence (H1), scored handoffs (H2), enforced provenance (H3), the real-trace test of the generalisation finding (H4) and the defence comparison (H5).
 
@@ -239,7 +252,7 @@ The pre-registration was frozen at 2026-11-15T13:25:37Z and its SHA-256 recorded
 
 ![Fig. 5. H4(a): the frozen model's step recall on v2 real traces, path-dependent (handoff) vs direct (send); Wilson 95% intervals.](figures/v2_f4_h4a_recall.png)
 
-**H5: defence comparison (supported).** On family B, `v2` had lower attack success than `v1`: the difference was −0.281, 95% CI [−0.431, −0.145]. Against `ml_only` it was −0.345 [−0.517, −0.186]. <!-- C16 --> Against `rules_only` it was −0.321 [−0.517, −0.148], so the registered claim against `rules_only` is also made. <!-- C17 --> TABLE VII and Fig. 6 give the counts. There were no infrastructure exclusions and no harness faults. <!-- C15 --> The model's own decision on the send step was BLOCKED for all 52 sends that carried a canary. `max_severity_reviewable` sent 44 of them to review, which `v2` does not execute, and kept 8 blocked. <!-- C24 --> With a simulated reviewer approving attack sends at chance, 17 of 53 attacks succeeded. <!-- C15 --> <!-- S8 --> Benign success ranged from 18 of 40 (`v2`) to 23 of 40 (`no_governance`), and the Wilson intervals of those two overlap (Fig. 7). <!-- C18 --> Median latency was 72–106 s per run with family B and benign runs pooled, and 81.4–94.0 s over benign runs alone. <!-- C18b --> <!-- C18c -->
+**H5: defence comparison (supported).** On family B, `v2` had lower attack success than `v1`: the difference was −0.281, 95% CI [−0.431, −0.145]. Against `ml_only` it was −0.345 [−0.517, −0.186]. <!-- C16 --> Against `rules_only` it was −0.321 [−0.517, −0.148], so the registered claim against `rules_only` is also made. <!-- C17 --> TABLE VII and Fig. 6 give the counts. There were no infrastructure exclusions and no harness faults. <!-- C15 --> The model's own decision on the send step was BLOCKED for all 52 sends that carried a canary. `max_severity_reviewable` sent 44 of them to review, which `v2` does not execute, and kept 8 blocked. <!-- C24 --> The 0 of 55 therefore holds only when sends held for review are never executed. With a simulated reviewer approving attack sends with probability 0.5 (`v2_reviewer`), 17 of 53 attacks succeeded, comparable to `v1` (16 of 57) and `rules_only` (18 of 56). <!-- C15 --> <!-- C24 --> <!-- S8 --> Benign success ranged from 18 of 40 (`v2`) to 23 of 40 (`no_governance`), and the Wilson intervals of those two overlap (Fig. 7). <!-- C18 --> Median latency was 72–106 s per run with family B and benign runs pooled, and 81.4–94.0 s over benign runs alone. <!-- C18b --> <!-- C18c -->
 
 **TABLE VII. H5: family B attack success and benign utility (`qwen2.5:3b`).**
 
@@ -287,18 +300,22 @@ Of the 55 `v2` family B runs that reached the writer, 8 were hard-blocked and 44
 
 <!-- TABLE IX: X2 -->
 
+*Text in this section was drafted with AI assistance [@claude]; see the Acknowledgment.*
+
 ## VII. DISCUSSION
 
 <!-- DRAFT: author to review -->
-**What stopped the leaks.** In the primary configuration no canary left the system (0 of 55). <!-- C15 --> The stopping decisions came from the learned model, but only at the send step: it rated all 52 canary-carrying sends BLOCKED. <!-- C24 --> It flagged 1 of 62 path-dependent handoffs. <!-- C12 --> The model therefore stopped the final, direct step of a compositional flow and not the flow itself. This matches its offline weakness on path-dependent attack types. <!-- C20 --> Enforced provenance supplied the correct sensitivity when agents misreported. <!-- C10 --> Handoff scoring changed outcomes only through R1's counting. <!-- C7 --> <!-- C8 --> <!-- S13 --> We read this as evidence that the monitor sees the end of a multi-agent flow, not its path. Scoring handoffs is necessary for a classifier to see that path, but in our data it was not sufficient.
+**What stopped the leaks.** In the primary configuration no canary left the system (0 of 55), because the sends held for review were never executed. <!-- C15 --> <!-- C24 --> The stopping decisions came from the learned model, but only at the send step: it rated all 52 canary-carrying sends BLOCKED. <!-- C24 --> It flagged 1 of 62 path-dependent handoffs. <!-- C12 --> The model therefore stopped the final, direct step of a compositional flow and not the flow itself. This matches its offline weakness on path-dependent attack types. <!-- C20 --> Enforced provenance supplied the correct sensitivity when agents misreported. <!-- C10 --> Handoff scoring changed outcomes only through R1's counting. <!-- C7 --> <!-- C8 --> <!-- S13 --> We read this as evidence that the monitor sees the end of a multi-agent flow, not its path. Scoring handoffs is necessary for a classifier to see that path, but in our data it was not sufficient.
 
-**Precedence is a policy, not a detail.** The same model and rules gave very different outcomes depending only on precedence. Under first-fire precedence a rule relaxed 70 live model blocks. <!-- C2 --> Escalation-only precedence removed every downgrade but hard-blocked many more benign sends. <!-- C3 --> <!-- C4 --> The reviewable variant recovered that utility by sending model blocks to a person. <!-- C5 --> Combining a learned and a rule-based control is therefore not monotonic in safety. A deployment has to choose where to place the residual risk, and say where it placed it.
+**Precedence is a policy, not a detail.** The same model and rules gave very different outcomes depending only on precedence. Under first-fire precedence a rule relaxed 70 live model blocks. <!-- C2 --> Escalation-only precedence removed every downgrade but hard-blocked many more benign sends. <!-- C3 --> <!-- C4 --> The reviewable variant recovered that utility by sending model blocks to a person. In the live tests it gave the same 70 downgrades and the same costs as `first_fire_v1`. <!-- C2 --> <!-- C5 --> Its one difference, that it never relaxes a rule's BLOCKED, did not change any outcome in these scenarios, so the live tests cannot distinguish it from first-fire precedence. <!-- S4 --> <!-- C2 --> <!-- C5 --> Combining a learned and a rule-based control is therefore not monotonic in safety. A deployment has to choose where to place the residual risk, and say where it placed it.
 
-**The residual risk rests on the reviewer.** 44 of the 52 stopped sends in `v2` were held for review, not blocked. <!-- C24 --> With a reviewer at chance, 17 of 53 attacks succeeded. <!-- C15 --> The exploratory sweep spans 0.08 to 0.74 expected attack success across approval probabilities from 0.1 to 0.93. <!-- X2 --> Phase 1 showed that an approve-everything reviewer can be worse than no review. <!-- v1:#34 --> The governance layer gave the reviewer no signal that separated a legitimate sensitive send from an attack carrying the same data; that observation comes from development runs (Supplementary Material). <!-- D12 --> Approval is a control point whose value is bounded by reviewer accuracy. It is not an independent guarantee.
+**The residual risk rests on the reviewer.** 44 of the 52 stopped sends in `v2` were held for review, not blocked. <!-- C24 --> With a simulated reviewer approving attack sends with probability 0.5, 17 of 53 attacks succeeded, comparable to `v1` (16 of 57) and `rules_only` (18 of 56). <!-- C15 --> The exploratory sweep spans 0.08 to 0.74 expected attack success across approval probabilities from 0.1 to 0.93. <!-- X2 --> Phase 1 showed that an approve-everything reviewer can be worse than no review. <!-- v1:#34 --> The governance layer gave the reviewer no signal that separated a legitimate sensitive send from an attack carrying the same data; that observation comes from development runs (Supplementary Material). <!-- D12 --> Approval is a control point whose value is bounded by reviewer accuracy. It is not an independent guarantee.
 
 **Cost of enforcement.** Enforced provenance removed misreporting as an attack path. Where declarations were wrong it also completed far fewer benign sends (2 of 12 against 10 of 12), because maximum-over-inputs propagation over-labels derived content. <!-- C11 --> Influence-based propagation [@permissive] targets exactly this cost; we did not implement it.
 
 **Evaluation method.** Freezing the analysis code with the pre-registration made one ambiguity visible rather than hidden. The registered H4(b) outcome depends on how steps without a canary are labelled: 0.654 under the registered code, 0.599 when they are left out. <!-- C13 --> <!-- C13b --> Without its last step, the position-only result falls to 0.567 (exploratory). <!-- X3 --> The independent recomputation also found a wrong observation in our own report. <!-- C24 --> We recommend that hypothesis texts define every label and denominator explicitly, and that recomputation be routine before reporting.
+
+*Text in this section was drafted with AI assistance [@claude]; see the Acknowledgment.*
 
 ## VIII. LIMITATIONS AND THREATS TO VALIDITY
 
@@ -319,31 +336,32 @@ Of the 55 `v2` family B runs that reached the writer, 8 were hard-blocked and 44
 - the pre-registered persistence study;
 - independent replication.
 
+*Text in this section was drafted with AI assistance [@claude]; see the Acknowledgment.*
+
 ## IX. CONCLUSION
 
 <!-- DRAFT: author to review -->
-We asked which runtime control stops a leak in a multi-agent LLM pipeline. In our pre-registered evaluation, the learned model stopped the final send of every canary-carrying flow, but almost never the handoffs that carried the data there. <!-- C24 --> <!-- C12 --> Enforced provenance stopped misreported sends, at a measured cost to benign sends. <!-- C10 --> <!-- C11 --> Handoff scoring helped only through a rule's double counting. <!-- C7 --> <!-- C8 --> Precedence decided whether residual risk became lost utility or a human decision. <!-- C4 --> <!-- C5 --> With one 3B-parameter local model and a scripted compromised writer, the combined configuration let no attack through, against 16 of 57 for the earlier design. <!-- C15 --> Most of its stops depend on a reviewer, and one registered hypothesis was not supported. <!-- C24 --> <!-- C13 --> The evaluation method may be as reusable as the system: a frozen pre-registration with its analysis code, canary ground truth, and independent recomputation.
+We asked which runtime control stops a leak in a multi-agent LLM pipeline. In our pre-registered evaluation, the learned model stopped the final send of every canary-carrying flow, but almost never the handoffs that carried the data there. <!-- C24 --> <!-- C12 --> Enforced provenance stopped misreported sends, at a measured cost to benign sends. <!-- C10 --> <!-- C11 --> Handoff scoring helped only through a rule's double counting. <!-- C7 --> <!-- C8 --> Precedence decided whether residual risk became lost utility or a human decision. <!-- C4 --> <!-- C5 --> With one 3B-parameter local model and a scripted compromised writer, the combined configuration let no attack through (0 of 55), but only because the sends it held for review were never executed; 44 of its 52 stops were reviews, not blocks. <!-- C15 --> <!-- C24 --> With a simulated reviewer approving attack sends with probability 0.5, it let 17 of 53 attacks through, comparable to the earlier design (16 of 57) and to rules alone (18 of 56). <!-- C15 --> <!-- S8 --> One registered hypothesis was not supported. <!-- C13 --> The evaluation method may be as reusable as the system: a frozen pre-registration with its analysis code, canary ground truth, and independent recomputation.
+
+*Text in this section was drafted with AI assistance [@claude]; see the Acknowledgment.*
 
 ## DATA AND CODE AVAILABILITY
 
 *[needs-author: repository URL / archive DOI.]* The code, the frozen pre-registration and its hash, all confirmatory result files, the analysis scripts, the independent recomputation, the claim–evidence ledger and the figure scripts are in the project repository. Supplementary Material lists every artifact and its commit. All data is synthetic; no personal data was used.
 
-## DECLARATION OF AI USE
-
-<!-- DRAFT: author to review; check against IEEE's current policy on AI-generated content (IEEE Access asks for disclosure in the Acknowledgment and for sections with AI-generated text to cite the AI system). -->
-The authors used Claude (Anthropic), through the Claude Code agentic coding tool, in five ways:
-
-- **Code implementation:** the v2 governance changes, the experiment harnesses and the tests.
-- **Experiment execution:** running the development and confirmatory experiments.
-- **Analysis scripting:** writing the pre-registered analysis scripts and the figure scripts.
-- **Independent recomputation:** a separate Claude agent instance, which did not read the analysis code, recomputed the confirmatory results.
-- **Drafting text:** parts of this manuscript, including drafts of the abstract, Introduction, Discussion, Limitations and Conclusion, and the supporting reports.
-
-*[needs-author: list the model versions used.]* The authors designed the study, approved the pre-registration before it was frozen, and reviewed and verified all code, results and text. They take full responsibility for the content of this article.
-
 ## ACKNOWLEDGMENT
 
-*[needs-author.]*
+<!-- DRAFT: author to review. Placed here per IEEE policy: AI-generated content is disclosed in the Acknowledgment, the AI system is named, the sections that use it are identified with the level of use, and those sections cite the AI system. Confirm the levels below after your own revision. -->
+*[needs-author: funding and other acknowledgments, if any.]*
+
+**Use of AI-generated content.** The author used Claude Opus 5.5 (Anthropic; model identifier `claude-opus-5-5`), through the Claude Code agentic coding tool [@claude]. The version is the one recorded on every commit of the project repository from 14 to 17 Nov. 2026; work done before that history began *[VERIFY: versions]*. The uses and the sections affected are:
+
+- **Text, all sections (Abstract and Sections I–IX):** drafted by Claude. Sections II–VI were drafted from the claim–evidence ledger and the project's reports. The Abstract, Section I, and Sections VII–IX were drafted from the contributions, framing and corrections the author specified. Every number was checked by a script against the cited ledger rows. The author reviewed and revised the text *[author to confirm the extent of revision]*. Each of Sections I–IX ends with a citation of the AI system.
+- **Tables I–IX and Figs. 1–8:** generated by Claude from the result files. Figs. 1 and 4–8 come from Claude-written plotting scripts; Figs. 2–3 are the Phase 1 figures *[VERIFY: whether AI was used to make them]*.
+- **Code and experiments:** Claude implemented the v2 governance changes, the experiment harnesses, the tests, and the pre-registered analysis and figure scripts, and ran the development and confirmatory experiments.
+- **Independent recomputation:** a separate Claude agent instance, which had not read the analysis code, recomputed the confirmatory results (Section V-D).
+
+The author designed the study and approved the pre-registration before it was frozen. The author takes full responsibility for the content of this article.
 
 ## REFERENCES
 

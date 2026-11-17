@@ -183,3 +183,54 @@ Each block opens with an editor's note saying it describes v1 and Phase 1.
 - **References:** 34.
 - **Page estimate:** about 13 two-column pages, including references and biographies. That is an estimate: it can
   only be measured once the text is set in the template.
+
+## 9. LaTeX conversion pass (17 Nov 2026)
+
+**Template:** the author uploaded `ACCESS_latex_template_20260513-1-1.zip` (13 May 2026; newer than the
+20240429 version mentioned in the request, so it was used) and `Access-Template-2024.docx`. Committed as uploaded
+in `976f440`, unzipped to `template/ACCESS_latex_template_20260513/`, then untracked and git-ignored in the next
+commit: the zip contains IEEE's licensed Formata and Giovanni fonts, which should not be redistributed publicly.
+
+**Framing fixes (author's instructions), in `build/manuscript_src.md`:**
+
+| Where | Change | Ledger rows |
+|---|---|---|
+| Abstract | 0 of 55 now says it holds only because sends held for review were never executed; added `v2_reviewer` 17 of 53, comparable to v1 16 of 57 and rules alone 18 of 56. Abbreviation "(LLM)" and "deterministic" dropped to stay at 244 words and abbreviation-free | C15, C24, S8 |
+| Contribution 2 | `max_severity_reviewable` gave the same live downgrades (70) and costs as `first_fire_v1`; its one difference (never relaxing a rule's BLOCKED) changed no outcome | C2, C5, S4 |
+| VI-B, H5 | the 0 of 55 condition and the `v2_reviewer` comparison stated in the results | C15, C24, S8 |
+| VII, "What stopped the leaks" and "Precedence is a policy" | same two points | C15, C24, C2, C5, S4 |
+| VII, "The residual risk" | "a reviewer at chance" replaced by the simulated reviewer at 0.5, with the v1 and `rules_only` comparison | C15 |
+| IX | the 0 of 55 condition, 44 of 52 stops being reviews, and the 17 of 53 comparison | C15, C24, S8 |
+
+**Abbreviations defined at first use:** LLM (I), IFC (II-B, new sentence), HR (III), HKDF, HMAC, SHA-256 (IV-E),
+AUROC (V-A), CI, WP4, WP6 (note under TABLE IV; CI again in V-D), AUPRC and SE (VI-A). ASR and PEP were already
+defined.
+
+**CaMeL:** venue set to Proc. IEEE SaTML 2026, verified by the author in a browser (17 Nov 2026); `[VERIFY: pages]`
+kept (the CSDL page does not render for automated fetching); TABLE I status "SaTML 2026"; Supplementary S12 updated.
+
+**AI disclosure:** the "Declaration of AI Use" section was removed and its content moved into the Acknowledgment,
+as IEEE policy asks. It names Claude Opus 5.5 (`claude-opus-5-5`; the version on every commit in the repository) and
+cites Claude Code as reference [35]. It lists the affected sections with the level of use. Each of Sections I–IX ends
+with a one-line citation of the AI system. Open: versions before the repository's history (`[VERIFY: versions]`),
+Phase 1 figures (`[VERIFY]`), extent of the author's revision.
+
+**Voice:** sole author. The template allows the first person singular or plural; "we" is kept, "the authors"
+became "the author".
+
+**Fig. 1:** new `figures/make_architecture_v2.py` (matplotlib; Graphviz is not installed) writes
+`v2_f0_architecture.{png,svg,pdf}`; the placeholder is replaced by the figure and a caption citing S1, S4–S7, S14.
+
+**LaTeX:** new `build/make_latex.py` writes `latex/PrivAgent_v2.tex` (ieeeaccess class), `latex/privagent_v2.bib`
+(35 entries, transcribed from `REFS`; author fields use the initials in `REFS`, nothing added), and
+`latex/PrivAgent_v2_Supplementary.tex` (article class). Tables are `table`/`table*` environments, figures
+`figure`/`figure*`, the captions are the existing ones, and every ledger-row comment is a `%` comment (adjacent
+ones merged, e.g. `% P1; S2; V1`). A static lint found balanced braces, environments and `$`, and no Markdown
+leftovers. **Not compiled:** no `pdflatex`, `latexmk` or `bibtex` is installed, so `PrivAgent_v2_overleaf.zip`
+(65 files, about 2.9 MB) is for Overleaf.
+
+**Other fixes:** Supplementary S11's first row was labelled with the generated-file comment; it is now "Title and
+Abstract". Number check after this pass: 0 unmatched blocks.
+
+**Length:** about 5,400 words of running text in the .tex body (including back matter), 9 tables, 8 figures, 35
+references. Estimated at about 14 pages; to be measured on Overleaf.
