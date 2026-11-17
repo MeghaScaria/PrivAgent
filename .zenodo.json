@@ -3,8 +3,8 @@
   "upload_type": "software",
   "creators": [
     {
-      "name": "[FAMILY NAME], [GIVEN NAMES]",
-      "orcid": "[ORCID]"
+      "name": "Scaria, Megha S",
+      "orcid": "https://orcid.org/0009-0001-6727-1353"
     }
   ],
   "description": "<p>PrivAgent is an inspectable research prototype for runtime governance of a four-agent LangGraph pipeline with four MCP servers. A single interception point combines a learned trajectory classifier, deterministic rules, a configurable decision precedence, enforced provenance, scored agent-to-agent handoffs, an opt-in human-approval gate and a hash-chained audit log.</p><p>The archive contains the code, the synthetic data generators, the exploratory Phase 1 evaluation, and the pre-registered Phase 2 evaluation: the frozen pre-registration and its hash, the raw confirmatory results, the analysis code, an independent recomputation, and the claim-evidence ledger behind the manuscript <em>What Stops a Leak? A Pre-Registered Evaluation of Learned, Rule-Based and Human Controls for Multi-Agent LLM Governance</em> (in preparation, not peer reviewed). All data is synthetic. The real-LLM pilot used one local 3B-parameter model.</p><p>Code is licensed under MIT. Data, results, trained models, figures, reports and text are licensed under CC BY 4.0.</p>",
@@ -20,5 +20,5 @@
   ],
   "version": "2.0.0",
   "language": "eng",
-  "notes": "needs-author: replace the creator placeholders, and add the manuscript DOI as a related identifier once it exists."
+  "notes": "needs-author: add the manuscript DOI as a related identifier once it exists."
 }

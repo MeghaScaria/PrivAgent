@@ -155,4 +155,7 @@ python -m tests.test_canary_v2
 
 ## Citation
 
+Author: Megha S Scaria (ORCID [0009-0001-6727-1353](https://orcid.org/0009-0001-6727-1353)).
+Repository: https://github.com/MeghaScaria/PrivAgent.
+
 See `CITATION.cff`. The manuscript is in preparation and has not been peer reviewed.

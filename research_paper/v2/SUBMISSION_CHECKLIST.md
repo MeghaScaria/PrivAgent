@@ -42,4 +42,4 @@ decision or input only the author can give).
 | 29 | Acknowledgment (funding, contributors) | **needs-author** | placeholder for funding; the AI disclosure is in place |
 | 30 | Phase 1 duplicate-publication check | **done** | The v1 paper was never posted or submitted anywhere (the author, 17 Nov 2026) |
 | 31 | First person for a sole author (template) | **done** | The template allows the first person singular or plural. "We" is kept; "the authors" is now "the author" |
-| 32 | IEEE template files not redistributed | **done** | The class, style and font files (including the licensed Formata and Giovanni fonts) are in the Overleaf zip, but they are git-ignored and untracked. The template commit `976f440` is in local history; see the release plan before any push |
+| 32 | IEEE template files not redistributed | **done** | The class, style and font files (including the licensed Formata and Giovanni fonts) are in the Overleaf zip, but they are git-ignored and untracked. The template commit (`976f440`) was dropped from `main` before the first public push (17 Nov 2026); no commit cited in the pre-registration, ledger or manuscript changed |

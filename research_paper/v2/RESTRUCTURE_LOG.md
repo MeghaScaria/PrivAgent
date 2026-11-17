@@ -234,3 +234,8 @@ Abstract". Number check after this pass: 0 unmatched blocks.
 
 **Length:** about 5,400 words of running text in the .tex body (including back matter), 9 tables, 8 figures, 35
 references. Estimated at about 14 pages; to be measured on Overleaf.
+
+**Note (17 Nov 2026, release preparation):** the template commit `976f440` mentioned above was dropped from `main`
+before the first public push, so it does not exist in the published history. The LaTeX-conversion commit was
+rebased onto `c1e0763` and its hash changed. Every commit cited in the pre-registration, ledger and manuscript
+precedes it and is unchanged.

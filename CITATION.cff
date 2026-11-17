@@ -3,13 +3,13 @@ message: "If you use this software or its data, please cite it as below."
 title: "PrivAgent: Code, Data and Pre-Registered Evaluation for Multi-Agent LLM Runtime Governance"
 type: software
 authors:
-  - family-names: "[FAMILY NAME]"     # needs-author
-    given-names: "[GIVEN NAMES]"      # needs-author
-    orcid: "https://orcid.org/[ORCID]"   # needs-author
+  - family-names: "Scaria"
+    given-names: "Megha S"
+    orcid: "https://orcid.org/0009-0001-6727-1353"
 license: MIT
-repository-code: "[REPOSITORY URL]"   # needs-author, after the first public push
+repository-code: "https://github.com/MeghaScaria/PrivAgent"
 version: "2.0.0"
-date-released: "[YYYY-MM-DD]"        # needs-author: date of the public release
+# date-released: YYYY-MM-DD   # needs-author: add the release date when the release is made
 keywords:
   - large language model agents
   - multi-agent systems
@@ -28,7 +28,7 @@ preferred-citation:
   type: article
   title: "What Stops a Leak? A Pre-Registered Evaluation of Learned, Rule-Based and Human Controls for Multi-Agent LLM Governance"
   authors:
-    - family-names: "[FAMILY NAME]"   # needs-author
-      given-names: "[GIVEN NAMES]"    # needs-author
+    - family-names: "Scaria"
+      given-names: "Megha S"
   status: preprint                    # manuscript in preparation; update when published
   year: 2026
