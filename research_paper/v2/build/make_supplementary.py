@@ -122,6 +122,8 @@ def mapping():
     out = ["| Manuscript section | Ledger rows cited |", "|---|---|"]
     for sec in re.split(r"\n(?=## )", ms):
         head = sec.splitlines()[0].lstrip("# ").strip()
+        if not sec.startswith("## "):        # text before the first section: title, abstract, index terms
+            head = "Title and Abstract"
         ids = []
         for c in re.findall(r"<!--(.*?)-->", sec, flags=re.S):
             for i in re.findall(r"(v1:#\d+|\b[A-Z]\d+[a-z]?\b)", c):
@@ -134,7 +136,7 @@ def mapping():
 
 VERIFY_LOG = """| Reference | Checked against (17 Nov 2026 unless stated) | Status |
 |---|---|---|
-| CaMeL | https://arxiv.org/abs/2503.18813 | arXiv record verified; venue **[VERIFY]**: the first author's publication list gives IEEE SaTML 2026, not confirmed on a conference page |
+| CaMeL | https://arxiv.org/abs/2503.18813; https://www.computer.org/csdl/proceedings-article/satml/2026/785900a587/2jZks3ksGT6 | arXiv record verified. Venue: Proc. IEEE SaTML 2026, verified by the author in a browser on 17 Nov 2026 (the CSDL page does not render for automated fetching). Pages **[VERIFY]** |
 | FIDES | https://neurips.cc/virtual/2026/poster/152696; https://arxiv.org/abs/2505.23643 | NeurIPS 2026 (title and authors as on the conference page); page numbers not available |
 | Permissive IFC | https://arxiv.org/abs/2410.03055; https://www.microsoft.com/en-us/research/publication/permissive-information-flow-analysis-for-large-language-models/ | TMLR, Oct. 2025, as listed by Microsoft Research (per the authors' instruction); the OpenReview page (id ufYRO8y3mr) could not be read |
 | CapAgent | https://api.crossref.org/works/10.3390/bdcc10090293 | verified (Crossref); publisher page returned HTTP 403 |
@@ -146,6 +148,7 @@ VERIFY_LOG = """| Reference | Checked against (17 Nov 2026 unless stated) | Stat
 | Kairos | https://arxiv.org/abs/2610.18457 | verified; identity confirmed by the authors |
 | Noumi et al. (Inspectra) | https://arxiv.org/abs/2608.21423 | verified (title, authors, submission date; the abstract names Inspectra as the authors' platform) |
 | McNemar | https://api.crossref.org/works?query.bibliographic=McNemar... (DOI 10.1007/BF02295996) | verified (Crossref) |
+| Claude Code (AI system, cited in Sections I–IX) | https://code.claude.com/docs/en/overview | page title and product name verified |
 | DeLong et al. | Crossref (DOI 10.2307/2531595) | verified except the end page (Crossref gives the first page only) **[VERIFY]** |
 | All other references | carried from the v1 paper, whose ledger records them as LIT (v1 ledger rows 40, 41) | not re-checked in this pass |
 """

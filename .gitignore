@@ -10,3 +10,11 @@ data/*.csv
 *.egg-info/
 .DS_Store
 .streamlit/secrets.toml
+
+# IEEE Access template and files derived from it (IEEE class files and licensed fonts; not redistributed)
+research_paper/v2/template/
+research_paper/v2/PrivAgent_v2_overleaf.zip
+research_paper/v2/latex/*
+!research_paper/v2/latex/*.tex
+!research_paper/v2/latex/*.bib
+!research_paper/v2/latex/figures/
